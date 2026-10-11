@@ -1,16 +1,28 @@
-import type { RequestHandler } from 'express';
+// Written by the Store part and handed to the Door (CONTRACT.md v2: the tap is the Door's).
+// Mount after body parsing: app.use(tap(db, siteId)).
+import { randomBytes } from 'node:crypto';
+import type { Request, RequestHandler } from 'express';
 import type { Db } from 'mongodb';
 import { deskCollections } from '../contract/db';
-import type { RequestDoc, RequestSource } from '../contract/types';
-import { newId } from './ids';
-import { agentSessionOf } from './session';
+import { ID_PREFIX, SESSION_COOKIE, SESSION_HEADER, type RequestDoc, type RequestSource } from '../contract/types';
 
-// How the Door marks its capability replays, so the tap can set source: "capability".
+const VALID_SESSION = /^[A-Za-z0-9_-]{8,64}$/;
+
+// CONTRACT.md section 2: header first, then cookie.
+export function sessionOf(req: Request): string | null {
+  const cookie = req.headers.cookie
+    ?.split(';')
+    .map((p) => p.trim().split('='))
+    .find(([k]) => k === SESSION_COOKIE)?.[1];
+  return [req.get(SESSION_HEADER), cookie].find((v): v is string => !!v && VALID_SESSION.test(v)) ?? null;
+}
+
+// The Door marks its own capability replays with this header, so the tap sets source: "capability".
 export const SOURCE_HEADER = 'x-agentdesk-source';
 export const REQUEST_ID_HEADER = 'x-agentdesk-request';
 
 // Not host-app traffic: static art, health checks and the Door's own endpoints.
-const SKIP = /^\/(health$|img\/|favicon\.ico$|agent(\/|$)|mcp(\/|$)|\.well-known\/)/;
+const SKIP = /^\/(health$|img\/|favicon\.ico$|agent(desk)?(\/|$)|mcp(\/|$)|\.well-known\/)/;
 const SECRET_KEY = /pass|card|cvc|cvv|secret|token|auth|ssn|_method/i;
 
 function typeOf(v: unknown): string {
@@ -47,7 +59,7 @@ export async function ensureTapIndexes(desk: Db) {
   ]);
 }
 
-// Records every host-app request into desk.requests (CONTRACT.md section 3), after the
+// Records every host-app request into `requests` (CONTRACT.md section 3), after the
 // response is sent, so the store never waits on it and a tap failure never breaks a page.
 export function tap(desk: Db, siteId: string): RequestHandler {
   const { requests, episodes } = deskCollections(desk);
@@ -56,11 +68,11 @@ export function tap(desk: Db, siteId: string): RequestHandler {
     if (SKIP.test(path)) return next();
     const started = performance.now();
     const timestamp = new Date();
-    const requestId = newId('req');
+    const requestId = ID_PREFIX.request + randomBytes(8).toString('hex');
     res.setHeader(REQUEST_ID_HEADER, requestId);
 
     res.on('finish', () => {
-      const sessionId = agentSessionOf(req);
+      const sessionId = sessionOf(req);
       const source: RequestSource =
         req.get(SOURCE_HEADER) === 'capability' ? 'capability' : sessionId ? 'fallback' : 'direct';
       const record = async () => {
