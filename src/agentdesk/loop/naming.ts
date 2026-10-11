@@ -130,7 +130,7 @@ export function describeChanges(changes: readonly Change[]): string | null {
         case "type":
           return `${c.method} ${c.path}: ${c.field} was ${c.failed}, success sent ${c.success}`;
         case "missing_field":
-          return `${c.method} ${c.path}: ${c.field} was missing, success sent ${c.success}`;
+          return `${c.method} ${c.path}: success sent ${c.field} (${c.success}), the failure did not`;
         case "extra_field":
           return `${c.method} ${c.path}: failure sent ${c.field} (${c.failed}), success did not`;
         case "missing_step":
