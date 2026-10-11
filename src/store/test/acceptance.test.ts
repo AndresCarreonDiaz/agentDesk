@@ -246,3 +246,14 @@ test('JSON checkout with nested shipping/payment keeps only the last 4 digits', 
   assert.equal(order.payment.last4, '1234');
   assert.doesNotMatch(JSON.stringify(await db.collection('orders').findOne({ shopperId: sid })), /4000/);
 });
+
+test('QA: oversized body is 413, robots.txt points at the sitemap, re-seeding restocks', async () => {
+  const big = await call('POST', '/cart/items', { sku: 'x'.repeat(40_000), qty: 1 });
+  assert.equal(big.status, 413);
+  assert.equal((await big.json()).error, 'payload_too_large');
+  const robots = await (await fetch(`${base}/robots.txt`)).text();
+  assert.match(robots, /Sitemap: http:\/\/store\.test\/sitemap\.xml/);
+  await db.collection('inventory').updateOne({ _id: 'CST-CORK' as never }, { $set: { available: 3 } });
+  await seedDatabase(db);
+  assert.equal((await db.collection('inventory').findOne({ _id: 'CST-CORK' as never }))?.available, 100);
+});

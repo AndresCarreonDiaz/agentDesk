@@ -6,8 +6,10 @@ import { loadConfig } from './config';
 import { mongoClient } from '../agentdesk/contract/db';
 import { collections, ensureIndexes } from './db';
 
-// Idempotent: products and coupons are replaced by _id; inventory is only created
-// if missing, so re-seeding never wipes stock that carts have reserved.
+// Idempotent: products and coupons are replaced by _id. Inventory is created if missing and
+// topped back up to STARTING_STOCK available, so carts left behind by rehearsal visits
+// (stock they reserved is never released) cannot run the demo out of blue mugs.
+// Reserved and sold counts are kept.
 export async function seedDatabase(db: Db) {
   const c = collections(db);
   await ensureIndexes(db);
@@ -25,6 +27,10 @@ export async function seedDatabase(db: Db) {
         },
       })),
     ),
+  );
+  await c.inventory.updateMany(
+    { _id: { $in: products.flatMap((p) => p.variants.map((v) => v.sku)) }, available: { $lt: STARTING_STOCK } },
+    { $set: { available: STARTING_STOCK } },
   );
   await c.coupons.bulkWrite(
     SEED_COUPONS.map((cp) => ({ replaceOne: { filter: { _id: cp._id }, replacement: cp, upsert: true } })),

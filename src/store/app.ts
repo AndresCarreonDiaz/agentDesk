@@ -38,11 +38,20 @@ function safeBackPath(referer: string | undefined): string {
 
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const known = err instanceof HttpError;
-  const parseError = (err as { type?: string }).type === 'entity.parse.failed';
-  const status = known ? err.status : parseError ? 400 : 500;
-  const code = known ? err.code : parseError ? 'bad_request' : 'internal';
-  const message = known ? err.message : parseError ? 'Request body is not valid JSON.' : 'Unexpected error.';
-  if (!known && !parseError) console.error(err);
+  // Body-parser errors (bad JSON, body too big) are the client's fault: answer 4xx, not 500.
+  const type = (err as { type?: string }).type;
+  const parseError = type === 'entity.parse.failed';
+  const tooLarge = type === 'entity.too.large';
+  const status = known ? err.status : parseError ? 400 : tooLarge ? 413 : 500;
+  const code = known ? err.code : parseError ? 'bad_request' : tooLarge ? 'payload_too_large' : 'internal';
+  const message = known
+    ? err.message
+    : parseError
+      ? 'Request body is not valid JSON.'
+      : tooLarge
+        ? 'Request body is too large (32 KB max).'
+        : 'Unexpected error.';
+  if (status >= 500) console.error(err);
 
   if (isForm(req)) {
     if (known && code === 'already_ordered') return res.redirect(303, `/orders/${err.details.orderId}`);
