@@ -323,12 +323,16 @@ async function updateCalledCapabilities(
         : callsCapability({ ...episode, turns: e.turns as EpisodeDoc["turns"] }, e.requests, cap),
     );
     const next = nextStage(cap.stage, history);
-    const set: Record<string, unknown> = { updatedAt: new Date() };
-    if (next !== cap.stage) {
-      set.stage = next;
-      set.verifiedByEpisodeId = next === "verified" ? history[history.length - 1].episodeId : null;
-      changed.push(cap.capabilityId);
-    }
+    if (next === cap.stage) continue;
+    // updatedAt marks a real improvement only: the Door's circuit breaker (CONTRACT v5.1) treats an update
+    // after the last failure as a repair, so a demotion must not touch it.
+    const demoted = cap.stage === "verified" && next === "proposed";
+    const set: Record<string, unknown> = {
+      stage: next,
+      verifiedByEpisodeId: next === "verified" ? history[history.length - 1].episodeId : null,
+    };
+    if (!demoted) set.updatedAt = new Date();
+    changed.push(cap.capabilityId);
     await ctx.cols.capabilities.updateOne({ capabilityId: cap.capabilityId }, { $set: set });
   }
   return changed;
