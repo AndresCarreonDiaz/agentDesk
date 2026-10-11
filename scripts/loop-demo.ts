@@ -1,6 +1,6 @@
-// Shows the Loop core learning from the fixtures, step by step. Run: node scripts/loop-demo.ts
+// Shows the Loop core learning from the fixtures, step by step. Run: npx tsx scripts/loop-demo.ts
 import { readFileSync } from "node:fs";
-import { closeEpisode, buildCapability, diffEpisodes, nextStage, proposeRules } from "../src/agentdesk/loop/core.ts";
+import { closeEpisode, buildCapability, diffEpisodes, nextStage, proposeRules } from "../src/agentdesk/loop/core.js";
 
 const load = (f: string) => JSON.parse(readFileSync(new URL(`../fixtures/${f}`, import.meta.url), "utf8"));
 const fail = load("episode-cart-prior-fail.json");
