@@ -4,7 +4,7 @@ The recursive part: closing episodes, the reflector, capability stages, metrics 
 
 ## Owns
 
-`src/loop/`
+`src/agentdesk/loop/`. It runs in the same process as the host app: `agentdesk()` calls `startLoop(ctx)` on boot, so the developer installs and runs nothing extra. It thinks with the developer's own LLM key.
 
 ## Reads / writes
 
@@ -17,15 +17,15 @@ See [CONTRACT.md](../CONTRACT.md) sections 3 to 6.
 
 ## Gives others
 
-- **Episode close:** after `/agent/done` or a timeout, join `requests` by `sessionId`, compute steps and duration, set outcome.
-- **Reflector:** classifies the failure (`unknown_site`, `unknown_steps`, `capability_failed`, `wrong_answer`, `blocked`) and learns: site facts into `knowledge`, a successful fallback request into an `observed` then `proposed` capability, a failed call into a fixed description or schema. Writes a plain `why` for the panel.
+- **Episode close:** after `done` (`/agent/done`) or after 60 seconds with no agent call and no tapped request for the session (then `outcome: "abandoned"`). Join `requests` by `sessionId`, compute steps and duration, set outcome.
+- **Reflector:** reads the agent's own `doneNote` first ("I wanted X and couldn't" is a free lesson). Classifies the failure (`unknown_site`, `unknown_steps`, `capability_failed`, `wrong_answer`, `blocked`) and learns: site facts into `knowledge`, a successful fallback request into an `observed` then `proposed` capability, a failed call into a fixed description or schema. Writes a plain `why` for the panel.
 - **Verification:** moves a capability to `verified` only when an episode with `goalSuccess: true` called it.
 - **Metrics:** success rate, steps and seconds per visit number, from `episodes`.
 - **Raindrop:** one event per visit with tool spans and signals (success, abandon, policy denial, correction). See [RAINDROP.md](../RAINDROP.md). Free tier stops at 1,000 events per month, so do not send one event per HTTP request.
 
 ## Needs from others
 
-- Store: real `requests` from the tap. Until then, use `fixtures/episode-cart-fail.json`.
+- Door: real `requests` from the tap (inside the package). Until then, use `fixtures/episode-cart-fail.json`.
 - Door: episodes with turns and `goalSuccess`. Until then, fixtures.
 
 ## Order
