@@ -215,9 +215,11 @@ Never offered: `observed`, `blocked`, or anything an active rule blocks.
 
 The agent's `goalSuccess` and `doneNote` are hypotheses. At close, Loop sets `episode.siteSuccess` from the tapped requests of that session:
 
-- `true`: the episode has at least one write request (not GET) to the host app, and every write in it returned 2xx.
-- `false`: a write in it returned 4xx or 5xx, or a rule refused it.
-- `null`: read-only visit; nothing on the site to check.
+Writes are requests other than GET, HEAD and OPTIONS. Group them by method + path and take the **last attempt** of each group. An agent that gets a 400, fixes its request and gets a 201 has succeeded.
+
+- `true`: at least one write, and the last attempt of every write group returned 2xx.
+- `false`: the last attempt of some write group returned 4xx or 5xx (including a rule refusal, 403).
+- `null`: read-only visit; nothing on the site to check. Reads never count, even a GET 500.
 
 Optional, for a site with a stronger signal: `agentdesk({ success: (requests) => boolean })`. Never required: the install stays one line.
 
@@ -279,3 +281,4 @@ The Store part owns the panel code (inside the package) and the demo store, whic
 - v2: one drop-in package (`src/agentdesk/`) holds tap, door, loop and panel; the tap moves from Store to Door. Install = `MONGODB_URI` + LLM key + `app.use(agentdesk())`, with the desk's own `agentdesk` database and a `settings` collection. Five fixed agent tools with capabilities as data (no dynamic MCP tools). `doneNote` on episodes, 60 second abandon timeout, `siteId` defined.
 - v3: committee review of v2 (see [REVIEW.md](REVIEW.md)). Learning from failures (section 4b): `priorFailureId`, `reflection.diff`, `failure` knowledge, reflector-proposed rules (`rules.source`, `rules.status`, `evidence`). Success oracle `siteSuccess`; `verified` needs it. Demotion after 2 failed episodes. `mappedRequests[]` sequence for multi-request actions. Active rules are enforced in the tap too, so fallback clicks cannot bypass them. `about` tells agents to call `list_actions` before `do`.
 - v4: Gemini accepted as the LLM (team default `gemini-2.5-flash`); `VOYAGE_API_KEY` optional with Gemini embeddings as fallback, provider locked in `settings.embedding`. Shared `contract/llm.ts` and `contract/embed.ts` are the only way to call a model or embed. Minimum install is two keys.
+- v3.1: `siteSuccess` uses the last attempt per method + path, so a fixed retry counts as success (committee red-team of the Loop oracle). The deterministic Loop core is graded by the frozen oracle in `verify/` (see `verify/README.md`).
