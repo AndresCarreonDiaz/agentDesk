@@ -2,7 +2,7 @@ import type { AgentDeskContext } from "../contract/context.js";
 import { cosine } from "../contract/embed.js";
 import { vectorSearch } from "../contract/search.js";
 import { autopilotOn, recordAudit } from "../contract/autopilot.js";
-import { capabilitySignature, isOffered, isPaused, isSensitive, type CapabilityDoc, type EpisodeDoc, type RuleDoc } from "../contract/types.js";
+import { capabilitySignature, isOffered, isPaused, isSensitive, type CapabilityDoc, type EpisodeDoc, type KnowledgeDoc, type RuleDoc } from "../contract/types.js";
 import { replay, fillPath, fillTemplate, type StepResult } from "./replay.js";
 import { activeRules, matchesRequest } from "./rules.js";
 
@@ -14,6 +14,7 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 
 export const LIST_ACTIONS_HINT = "Call list_actions before do; actions are learned and change over time.";
 const ASK_MIN_SCORE = 0.55;
+const FALLBACK_FACTS = 30;
 
 export interface ToolResult {
   /** Plain text for the agent. */
@@ -65,8 +66,22 @@ export async function ask(ctx: AgentDeskContext, question: string): Promise<Tool
   const q = question.trim();
   if (!q) return { reply: "Ask me a question in plain words, for example: what do you sell?", unknown: true };
 
-  const vector = await ctx.embedder.embedOne(q, "query");
-  const hits = await vectorSearch(ctx.cols.knowledge, vector, { siteId: ctx.config.siteId, k: 6, minScore: ASK_MIN_SCORE });
+  // Semantic search first. If embeddings are down, or facts were saved without vectors, the desk still
+  // answers: a site's facts are few, so the model reads them all instead of failing the agent.
+  let hits: (KnowledgeDoc & { score?: number })[] = [];
+  try {
+    const vector = await ctx.embedder.embedOne(q, "query");
+    hits = await vectorSearch(ctx.cols.knowledge, vector, { siteId: ctx.config.siteId, k: 6, minScore: ASK_MIN_SCORE });
+  } catch (err) {
+    ctx.log.warn(`ask: semantic search unavailable (${(err as Error).message}); reading all facts`);
+  }
+  if (hits.length === 0) {
+    hits = await ctx.cols.knowledge
+      .find({ siteId: ctx.config.siteId }, { projection: { embedding: 0 } })
+      .sort({ createdAt: -1 })
+      .limit(FALLBACK_FACTS)
+      .toArray();
+  }
   if (hits.length === 0) {
     return { reply: "I don't know yet. I am still learning about this site, and I have noted your question.", unknown: true };
   }
@@ -121,11 +136,16 @@ export async function listActions(ctx: AgentDeskContext, query?: string): Promis
     };
   }
   if (query?.trim() && caps.length > 1) {
-    const v = await ctx.embedder.embedOne(query, "query");
-    caps = caps
-      .map((c) => ({ c, s: c.embedding?.length === v.length ? cosine(v, c.embedding) : 0 }))
-      .sort((a, b) => b.s - a.s)
-      .map((x) => x.c);
+    // Ranking is a nicety: without embeddings the agent still gets every offered action.
+    try {
+      const v = await ctx.embedder.embedOne(query, "query");
+      caps = caps
+        .map((c) => ({ c, s: c.embedding?.length === v.length ? cosine(v, c.embedding) : 0 }))
+        .sort((a, b) => b.s - a.s)
+        .map((x) => x.c);
+    } catch (err) {
+      ctx.log.warn(`list_actions: ranking unavailable (${(err as Error).message})`);
+    }
   }
   const actions: OfferedAction[] = caps.map((c) => ({
     name: c.name,
