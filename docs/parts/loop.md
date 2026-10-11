@@ -45,9 +45,26 @@ See [CONTRACT.md](../CONTRACT.md) sections 3 to 6.
 
 ## Run and test
 
-- Run: _fill in_
-- Test: _fill in_
+- Run: nothing to start. `agentdesk()` calls `startLoop(ctx)` on boot, and the Loop sweeps every 3 seconds. An open episode closes when the agent called `done`, or after 60 seconds with no turn and no tapped request (then `outcome: "abandoned"`, `goalSuccess: null`).
+- Use from code (`src/agentdesk/loop/index.ts`):
+  - `processEpisode(ctx, episodeId)`: reflects on one episode; safe to run twice. Returns `{ closed, siteSuccess, capabilityIds, knowledgeIds, ruleIds, raindrop }`.
+  - `sweepOnce(ctx)`: closes every open episode that is done or idle.
+  - `loopMetrics(ctx)`: `{ visits: [{ n, episodeId, success, steps, seconds }], failuresBeforeFirstSuccess: { [intent]: n } }`.
+- Raindrop: set `RAINDROP_WRITE_KEY` and each processed episode sends one `agent_visit` event (5 second timeout, never throws). Without the key it is `skipped`.
+- Test, deterministic core (no Atlas, no LLM): `verify/oracle.sh .` must print `oracle: 86/86 passed`; `npx tsx scripts/loop-demo.ts` shows the core on the fixtures.
+- Test, types: `npx tsc --noEmit`.
+- Test, wired Loop: set `AGENTDESK_DB=agentdesk_<yourname>` (and `AGENTDESK_SITE_ID=demo-store` for the fixtures), build a context with `createContext()` from `contract/context.ts`, insert the two fixture episodes and their requests (`fixtures/episode-cart-prior-fail.json`, then `fixtures/episode-cart-fail.json`), call `processEpisode` on each, and read the collections. Expect: the failed episode closes with `siteSuccess: false`; the second gets `priorFailureId`, `reflection.diff` "POST /cart/items: qty was string, success sent number", one `proposed` `add_to_cart` capability and one `failure` lesson; running it again changes nothing. Clean up with `deleteMany` (the sandbox user cannot drop databases).
 
 ## Status
 
-Not started.
+Live: the Loop is wired to real data (CONTRACT sections 3 to 6).
+
+- Closes episodes: `requestIds`, `siteSuccess`, `steps`, `durationMs`, `priorFailureId`, `outcome` (Door's `blocked` is kept), and a `reflection` with the failure kind, a plain `why`, the `diff` and what was `learned`.
+- A successful fallback write sequence becomes one capability per method + path sequence: LLM name and description when the model works, a deterministic name (for example `add_to_cart`) when it does not; embedded when the embedder works; staged `observed` then `proposed`.
+- Capabilities an episode called get `stats` updated and move to `verified` (goal and site both true) or back to `proposed` (2 failed episodes in a row). `approved` and `blocked` never change.
+- A failure fixed by a later success writes a `failure` lesson (deduped by episode and by text).
+- Repeated failing writes become `proposed` `require_review` rules, once per route.
+- Raindrop: one event per processed episode (Order step 8 basics). Experiments are not built.
+- Metrics: `loopMetrics` gives the learning curve and failures before the first success (Order step 7).
+- Not built: capability repair from the diff (`inputSchema` or `mappedRequests` edits), the optional `agentdesk({ success })` oracle, the reflector playbook (Order step 9).
+- Known overlap: Door already counts `stats.calls` when `do` runs a capability; the Loop adds one call per processed episode on top, with `successes` judged by `siteSuccess`.
