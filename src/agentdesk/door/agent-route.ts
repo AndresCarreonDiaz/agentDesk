@@ -95,7 +95,8 @@ export function createAgentRouter(ctx: AgentDeskContext): Router {
 
       let routed: { tool: ToolName; input: Record<string, unknown>; goal: string | null };
       if (tool) {
-        const input = pathTool ? body : ((body.input as Record<string, unknown>) ?? {});
+        const { sessionId: _sid, tool: _tool, ...rest } = body;
+        const input = pathTool ? rest : ((body.input as Record<string, unknown>) ?? {});
         routed = { tool: tool as ToolName, input: tool === "do" && pathTool ? { action: body.action, input: body.input } : input, goal: typeof body.goal === "string" ? body.goal : null };
       } else {
         routed = await route(ctx, message!);
