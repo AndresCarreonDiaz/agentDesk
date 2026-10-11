@@ -76,18 +76,15 @@ Built at the Harness Engineering & Model Wrangling #SFTechWeek Hackathon (MongoD
 
 | Tool | What AgentDesk uses it for |
 |---|---|
-| **MongoDB Atlas** (hackathon sandbox cluster) | The desk's whole memory: episodes, tapped requests, knowledge, capabilities, rules and developer feedback, as flexible documents that fit any host platform |
-| **Atlas Agent Engine: memory** | Episodic (each agent visit), semantic (facts about the platform), procedural (learned capabilities and flows), taxonomic (intents and agent families) |
-| **Atlas Agent Engine: guardrails** | Developer rules ("no discount codes") compiled into content guardrails that block, modify or require review, live on the next request |
-| **Atlas Agent Engine: Policy Engine** | Tool allowlist built from approved capabilities, plus caps on tool calls and tokens per visit, so a blocked capability cannot be called even if the model tries |
-| **Atlas Agent Engine: traces** | Execution traces behind the desk's "why it happened" explanation for each visit |
-| **Voyage AI + Atlas Vector Search** | Matching a visitor's free-text request to the right intent and capability |
-| **Atlas change streams** | Live feed of visits and newly learned capabilities in the developer panel |
-| **Raindrop** | Hard signals per visit (success, abandon, steps, seconds, unanswered questions, policy denials) and Experiments to A/B desk versions |
-| **Modelence** | Hosts the demo store with AgentDesk inside, which is the public demo link |
-| **Cursor, AWS Kiro, MongoDB MCP server** | Build tooling during the event |
+| **MongoDB Atlas** (hackathon sandbox cluster) | The desk's whole memory, in its own database inside the developer's cluster: visits, tapped requests, learned facts, learned actions, rules, the audit log and settings. Flexible documents fit any host platform. |
+| **Atlas Vector Search** | Three vector indexes (knowledge, capabilities, intents) match an agent's free-text request to what the desk learned. Search falls back to in-process cosine while an index is still building. |
+| **Voyage AI through Atlas** (AI Model APIs) | Embeddings (`voyage-3.5`, 1024 dimensions) via `ai.mongodb.com` with an Atlas model API key. Each database locks its embedding provider on first start. |
+| **Gemini** (`gemini-3.8-flash`) | The desk's thinking: routing a plain-language request to a tool, answering only from learned facts, naming learned actions, reading the site's own pages. |
+| **MCP** (Streamable HTTP) | The five fixed agent tools, stateless, so restarts and several instances lose nothing. |
+| **Raindrop** | One event per closed visit from the Loop, with success and abandon signals. |
+| **Modelence** | Hosts Harbor Goods with AgentDesk inside: the public demo link. |
 
-If Atlas Agent Engine is not enabled in the sandbox, AgentDesk enforces the same rules and allowlist itself from its Atlas collections.
+**Atlas Agent Engine** is not used, on purpose. AgentDesk runs inside the developer's own app with one line and their own keys, while Agent Engine runs agents on its hosted runtime. AgentDesk keeps the same ideas in its own Atlas collections (long-term memory, an action allowlist by stage, rules enforced on every path, an audit log). Exporting learned actions as Agent Engine tools is a natural next step.
 
 ## Team
 
