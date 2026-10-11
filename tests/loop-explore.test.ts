@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isOffered } from "../src/agentdesk/contract/types.js";
 import { rememberHostBaseUrl } from "../src/agentdesk/contract/site.js";
 import { createTap } from "../src/agentdesk/door/tap.js";
-import { exploreAfterVisit, exploreSite, formsOf, shouldExplore } from "../src/agentdesk/loop/explore.js";
+import { exploreAfterVisit, exploreSite, formsOf, pickPages, shouldExplore } from "../src/agentdesk/loop/explore.js";
 import { fakeCtx } from "./fake-ctx.js";
 
 const html = (title: string, body: string) => `<!doctype html><html><head><title>${title}</title></head><body>${body}</body></html>`;
@@ -47,6 +47,18 @@ describe("explorer", () => {
   it("reads forms with the real method and fields", () => {
     const forms = formsOf("http://x", { path: "/cart", title: "Cart", text: `<form action="/api/cart/items/MUG" method="post"><input type="hidden" name="_method" value="PATCH"><input name="qty" type="number" value="2"><input type="submit" value="Update"></form>` });
     expect(forms).toEqual([{ method: "PATCH", path: "/api/cart/items/MUG", fields: [{ name: "qty", type: "number", value: "2" }], label: "Update", page: "/cart", pageTitle: "Cart" }]);
+  });
+
+  it("treats the public SITE_URL as the same site (deployed behind a proxy, links are absolute)", () => {
+    const before = process.env.SITE_URL;
+    process.env.SITE_URL = "https://harbor.example.app";
+    try {
+      const pages = pickPages("http://127.0.0.1:8080", ["- [Mug](https://harbor.example.app/products/harbor-mug)\n- [Elsewhere](https://evil.example.com/x)"]);
+      expect(pages).toEqual(["/products/harbor-mug"]);
+    } finally {
+      if (before === undefined) delete process.env.SITE_URL;
+      else process.env.SITE_URL = before;
+    }
   });
 
   it("explores only when the desk did not know", () => {

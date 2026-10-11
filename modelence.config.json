@@ -1,0 +1,22 @@
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  // Harbor Goods (the demo store) with AgentDesk installed: one Node web process.
+  "resources": {
+    "web": {
+      "type": "service",
+      "image": "node-22-slim",
+      "build": { "commands": ["npm ci"] },
+      // Modelence injects its own MONGODB_URI; the hackathon requires the Atlas Sandbox, so the
+      // sandbox connection string (SANDBOX_MONGODB_URI) replaces it for the app.
+      "start": { "commands": ["sh -c 'MONGODB_URI=\"$SANDBOX_MONGODB_URI\" exec npm run start'"] }
+    }
+  },
+  "env": {
+    "SANDBOX_MONGODB_URI": { "type": "secret" },
+    "GEMINI_API_KEY": { "type": "secret" },
+    "VOYAGE_API_KEY": { "type": "secret" },
+    "RAINDROP_WRITE_KEY": { "type": "secret", "required": false },
+    "AGENTDESK_DB": { "type": "text", "value": "agentdesk" },
+    "MONGODB_DB_STORE": { "type": "text", "value": "harbor" }
+  }
+}
