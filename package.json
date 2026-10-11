@@ -19,7 +19,8 @@
     "smoke:door": "tsx --env-file=.env scripts/smoke-door.ts",
     "smoke:visit": "tsx --env-file=.env scripts/smoke-visit.ts",
     "demo:mcp": "tsx --env-file=.env scripts/demo-mcp.ts",
-    "visit:gemini": "tsx --env-file=.env scripts/visitor-gemini.ts"
+    "visit:gemini": "tsx --env-file=.env scripts/visitor-gemini.ts",
+    "reset:desk": "tsx --env-file=.env scripts/reset-desk.ts"
   },
   "dependencies": {
     "@google/genai": "^2.28.0",
