@@ -89,7 +89,7 @@ export interface CapabilityDoc extends Base {
   sourceRequestId: string;
   verifiedByEpisodeId: string | null;
   // Door owns stats. consecutiveFailures and lastFailureAt drive the breaker (isPaused).
-  stats: { calls: number; successes: number; consecutiveFailures?: number; lastFailureAt?: Date | null };
+  stats: { calls: number; successes: number; consecutiveFailures?: number; lastFailureAt?: Date | null; pausedFor?: string | null };
   examples: { input: unknown; requestId: string }[];
   embedding: number[];
   updatedAt: Date;
@@ -193,16 +193,29 @@ export function isOffered(
 }
 
 // The breaker (CONTRACT section 4, "Autopilot"): 2 failed runs in a row pause a capability, whatever
-// its kind or stage. It comes back when the Loop updates it after the last failure (a repair or a
-// relearn sets updatedAt), or when the panel's approve resets consecutiveFailures to 0.
-export function isPaused(cap: Partial<Pick<CapabilityDoc, "stats" | "updatedAt">>): boolean {
+// its kind or stage. It comes back on its own when the Loop repairs it (what it sends changed since it
+// failed), after a 10 minute cooldown for one trial run (success resets it, failure pauses it again),
+// or when the panel's approve resets consecutiveFailures to 0. It does not trust updatedAt: the Loop
+// touches that on every visit that used the capability, repaired or not.
+export const PAUSE_COOLDOWN_MS = 10 * 60_000;
+
+/** What a capability sends: its requests and inputs. A Loop repair changes it. */
+export function capabilitySignature(cap: Partial<Pick<CapabilityDoc, "mappedRequests" | "inputSchema">>): string {
+  return JSON.stringify([cap.mappedRequests ?? [], cap.inputSchema ?? {}]);
+}
+
+export function isPaused(
+  cap: Partial<Pick<CapabilityDoc, "stats" | "mappedRequests" | "inputSchema">>,
+  now: number = Date.now(),
+): boolean {
   const failures = cap.stats?.consecutiveFailures ?? 0;
-  const lastFailureAt = cap.stats?.lastFailureAt;
   if (failures < 2) return false;
-  if (!cap.updatedAt) return true;
-  if (!lastFailureAt) return false;
   // Compared as times: fixtures and JSON imports carry dates as strings.
-  return new Date(cap.updatedAt).getTime() <= new Date(lastFailureAt).getTime();
+  const last = cap.stats?.lastFailureAt ? new Date(cap.stats.lastFailureAt).getTime() : 0;
+  if (now - last >= PAUSE_COOLDOWN_MS) return false; // half-open: one trial run
+  const pausedFor = cap.stats?.pausedFor;
+  if (pausedFor && pausedFor !== capabilitySignature(cap)) return false; // repaired by the Loop
+  return true;
 }
 
 /** A write that needs the developer even on autopilot: it looks like it spends money or places an order. */

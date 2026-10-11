@@ -3,14 +3,15 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { clearAutopilotCache } from "../src/agentdesk/contract/autopilot.js";
 import { newId } from "../src/agentdesk/contract/ids.js";
-import { isPaused, type CapabilityDoc } from "../src/agentdesk/contract/types.js";
+import { PAUSE_COOLDOWN_MS, capabilitySignature, isPaused, type CapabilityDoc } from "../src/agentdesk/contract/types.js";
 import { clearRuleCache } from "../src/agentdesk/door/rules.js";
 import { createTap } from "../src/agentdesk/door/tap.js";
 import { doAction, listActions } from "../src/agentdesk/door/tools.js";
 import { fakeCtx } from "./fake-ctx.js";
 
-// The breaker (CONTRACT section 4, "Autopilot"): 2 failed runs in a row pause a capability until
-// the Loop updates it or the panel's approve resets the streak.
+// The breaker (CONTRACT section 4, "Autopilot"): 2 failed runs in a row pause a capability until the
+// Loop repairs it (what it sends changes), a 10 minute cooldown passes (one trial run), or the panel's
+// approve resets the streak. updatedAt alone does not un-pause it: the Loop touches it on every visit.
 
 const earlier = new Date(Date.now() - 60_000);
 const addToCart = (stage: CapabilityDoc["stage"] = "proposed"): CapabilityDoc => ({
@@ -24,21 +25,32 @@ const addToCart = (stage: CapabilityDoc["stage"] = "proposed"): CapabilityDoc =>
 
 describe("isPaused", () => {
   const lastFailureAt = new Date("2026-10-11T20:00:00Z");
-  const streak = (n: number) => ({ calls: n, successes: 0, consecutiveFailures: n, lastFailureAt });
+  const now = lastFailureAt.getTime() + 60_000;
+  const cap = addToCart();
+  const failedVersion = capabilitySignature(cap);
+  const streak = (n: number) => ({ calls: n, successes: 0, consecutiveFailures: n, lastFailureAt, pausedFor: failedVersion });
 
-  it("pauses at 2 failures in a row until something updates the capability after the last one", () => {
-    expect(isPaused({ stats: { calls: 0, successes: 0 }, updatedAt: earlier })).toBe(false); // no streak yet
-    expect(isPaused({ stats: streak(1), updatedAt: new Date("2026-10-11T19:00:00Z") })).toBe(false);
-    expect(isPaused({ stats: streak(2), updatedAt: new Date("2026-10-11T19:00:00Z") })).toBe(true);
-    expect(isPaused({ stats: streak(2) })).toBe(true); // no updatedAt
-    expect(isPaused({ stats: streak(2), updatedAt: lastFailureAt })).toBe(true); // same instant is not after
-    expect(isPaused({ stats: streak(3), updatedAt: new Date("2026-10-11T20:00:01Z") })).toBe(false);
+  it("pauses at 2 failures in a row", () => {
+    expect(isPaused({ ...cap, stats: { calls: 0, successes: 0 } }, now)).toBe(false); // no streak yet
+    expect(isPaused({ ...cap, stats: streak(1) }, now)).toBe(false);
+    expect(isPaused({ ...cap, stats: streak(2) }, now)).toBe(true);
+    expect(isPaused({ ...cap, stats: streak(3) }, now)).toBe(true);
+  });
+
+  it("comes back when the Loop repairs what it sends, not when updatedAt merely moves", () => {
+    const repaired = { ...cap, mappedRequests: [{ method: "POST", path: "/api/cart/items", bodyTemplate: { sku: "{{sku}}", quantity: "{{qty}}" } }] };
+    expect(isPaused({ ...repaired, stats: streak(2) }, now)).toBe(false);
+    expect(isPaused({ ...cap, updatedAt: new Date(now), stats: streak(2) } as CapabilityDoc, now)).toBe(true);
+  });
+
+  it("gets one trial run after the cooldown", () => {
+    expect(isPaused({ ...cap, stats: streak(2) }, lastFailureAt.getTime() + PAUSE_COOLDOWN_MS - 1)).toBe(true);
+    expect(isPaused({ ...cap, stats: streak(2) }, lastFailureAt.getTime() + PAUSE_COOLDOWN_MS)).toBe(false);
   });
 
   it("reads dates stored as strings, as in fixtures", () => {
     const stats = { ...streak(2), lastFailureAt: "2026-10-11T20:00:00Z" as unknown as Date };
-    expect(isPaused({ stats, updatedAt: "2026-10-11T19:31:00Z" as unknown as Date })).toBe(true);
-    expect(isPaused({ stats, updatedAt: "2026-10-11T20:31:00Z" as unknown as Date })).toBe(false);
+    expect(isPaused({ ...cap, stats }, now)).toBe(true);
   });
 });
 
@@ -114,12 +126,15 @@ describe("the breaker in a real host", () => {
     expect(pauses()).toHaveLength(0);
   });
 
-  it("comes back when the Loop updates it after the last failure (a repair or a relearn)", async () => {
+  it("comes back when the Loop repairs it (what it sends changed), not when it only touches updatedAt", async () => {
     await run();
     await run();
     expect(await offered()).toEqual([]);
-    // What the Loop writes when it repairs or relearns a capability: a newer updatedAt.
-    await cols.capabilities.updateOne({ capabilityId: "cap_add_to_cart" }, { $set: { updatedAt: new Date(stats().lastFailureAt.getTime() + 1) } });
+    // The Loop touches updatedAt on every visit that used it: that alone must not un-pause it.
+    await cols.capabilities.updateOne({ capabilityId: "cap_add_to_cart" }, { $set: { updatedAt: new Date(Date.now() + 1000) } });
+    expect(await offered()).toEqual([]);
+    // A repair changes what it sends.
+    await cols.capabilities.updateOne({ capabilityId: "cap_add_to_cart" }, { $set: { inputSchema: { type: "object", properties: { sku: { type: "string" } }, required: ["sku"] } } });
     expect(await offered()).toEqual(["add_to_cart"]);
     failing = false;
     expect((await run()).data).toMatchObject({ ok: true });

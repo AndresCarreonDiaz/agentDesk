@@ -2,7 +2,7 @@ import type { AgentDeskContext } from "../contract/context.js";
 import { cosine } from "../contract/embed.js";
 import { vectorSearch } from "../contract/search.js";
 import { autopilotOn, recordAudit } from "../contract/autopilot.js";
-import { isOffered, isPaused, isSensitive, type CapabilityDoc, type EpisodeDoc, type RuleDoc } from "../contract/types.js";
+import { capabilitySignature, isOffered, isPaused, isSensitive, type CapabilityDoc, type EpisodeDoc, type RuleDoc } from "../contract/types.js";
 import { replay, fillPath, fillTemplate, type StepResult } from "./replay.js";
 import { activeRules, matchesRequest } from "./rules.js";
 
@@ -253,7 +253,11 @@ async function bumpStats(ctx: AgentDeskContext, cap: CapabilityDoc, ok: boolean)
     // One atomic update, so when two failures race only one of them sees exactly 2.
     const after = await ctx.cols.capabilities.findOneAndUpdate(
       filter,
-      { $inc: { "stats.calls": 1, "stats.successes": 0, "stats.consecutiveFailures": 1 }, $set: { "stats.lastFailureAt": new Date() } },
+      {
+        $inc: { "stats.calls": 1, "stats.successes": 0, "stats.consecutiveFailures": 1 },
+        // pausedFor remembers the version that failed, so a Loop repair (a new signature) un-pauses it.
+        $set: { "stats.lastFailureAt": new Date(), "stats.pausedFor": capabilitySignature(cap) },
+      },
       { returnDocument: "after", projection: { stats: 1 } },
     );
     return after?.stats?.consecutiveFailures ?? 0;

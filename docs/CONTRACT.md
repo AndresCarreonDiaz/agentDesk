@@ -141,7 +141,8 @@ All documents carry `siteId` (which host platform) and `createdAt`.
   verifiedByEpisodeId: string | null;
   stats: { calls: number; successes: number;
            consecutiveFailures?: number;   // failed `do` runs in a row; a success sets it back to 0
-           lastFailureAt?: Date | null };  // the last failed run; with the count, drives "Paused" (section 4)
+           lastFailureAt?: Date | null;    // the last failed run; with the count, drives "Paused" (section 4)
+           pausedFor?: string | null };    // capabilitySignature of the version that failed; a repair changes it
   examples: { input: unknown; requestId: string }[];
   embedding: number[];                  // from contract/embed.ts, for intent match
   updatedAt: Date;
@@ -233,7 +234,7 @@ The developer should not have to approve every action, or the desk gets stuck. `
 - **On:** learned everyday writes (add to cart, apply a filter, request a quote) go live for agents as soon as they are `proposed`. The developer reviews later.
 - **Money always asks:** a write that looks like checkout, payment, an order, a refund or a transfer (`isSensitive`: its name, path, or payment fields like card, iban, amount) waits for `approved` even on autopilot.
 - **Audit:** every time `do` runs a write that is not `approved`, the Door writes an `audit` entry (`actor: "autopilot"`, `action: "ran_unreviewed"`). The panel lists them: approve keeps it, block stops it. Turning autopilot on or off is audited too.
-- **Paused:** 2 failed `do` runs in a row pause a capability (`isPaused` in `contract/types.ts`), whatever its kind or stage, on autopilot or not. The Door stops offering it, refuses `do` with `paused_failing`, and audits the pause once (`action: "paused_failing"`). The streak lives in `stats.consecutiveFailures` and `stats.lastFailureAt`; a success resets it. It un-pauses on its own when the Loop updates the capability after the last failure (a repair or relearn sets `updatedAt`), or when the panel approves it, which sets `stats.consecutiveFailures` to 0. Demotion alone is not enough, because autopilot still offers `proposed` writes.
+- **Paused:** 2 failed `do` runs in a row pause a capability (`isPaused` in `contract/types.ts`), whatever its kind or stage, on autopilot or not. The Door stops offering it, refuses `do` with `paused_failing`, and audits the pause once (`action: "paused_failing"`). The streak lives in `stats.consecutiveFailures` and `stats.lastFailureAt`; a success resets it. It un-pauses on its own when the Loop **repairs** it (what it sends changed: `capabilitySignature` no longer matches `stats.pausedFor`), after a **10 minute cooldown** for one trial run (a success resets it, a failure pauses it again), or when the panel approves it, which sets `stats.consecutiveFailures` to 0. A newer `updatedAt` alone does not un-pause it, because the Loop touches `updatedAt` on every visit that used the capability. Demotion alone is not enough, because autopilot still offers `proposed` writes.
 - **Rules still win:** active rules and `blocked` are always refused, on autopilot or not.
 - **Why it is safe:** the Door only replays requests the host app already accepted from an agent on its own website, through the same endpoint, session and validation. Autopilot adds speed, not new permissions.
 
@@ -312,4 +313,4 @@ The Store part owns the panel code (inside the package) and the demo store, whic
 - v4.1: default model is `gemini-3.8-flash`; Google closed `gemini-2.5-flash` to new keys.
 - v4.2: template syntax for agent input in `mappedRequests`: `"{{sku}}"` or `"{{input.sku}}"` (the Door accepts both; the Loop writes the bare form).
 - v5: Autopilot. `settings.autopilot` (on by default): learned writes are offered at `proposed` / `verified` without approval, except money (`isSensitive`), which still needs `approved`. New `audit` collection: the Door records every unreviewed write it runs; the panel reviews and toggles. Rules and `blocked` always win.
-- v5.1: Paused (a circuit breaker). The Door counts failed `do` runs in a row in `stats.consecutiveFailures` and `stats.lastFailureAt`; 2 in a row pause the capability (`isPaused`): not offered, `do` refuses with `paused_failing`, and the pause is audited (`paused_failing`). It comes back when the Loop updates the capability or the panel's approve resets the count to 0.
+- v5.1: Paused (a circuit breaker). The Door counts failed `do` runs in a row in `stats.consecutiveFailures` and `stats.lastFailureAt`; 2 in a row pause the capability (`isPaused`): not offered, `do` refuses with `paused_failing`, and the pause is audited (`paused_failing`). It comes back when the Loop repairs it (`stats.pausedFor` no longer matches), after a 10 minute cooldown for one trial run, or when the panel's approve resets the count to 0.
