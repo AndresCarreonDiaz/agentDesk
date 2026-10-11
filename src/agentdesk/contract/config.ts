@@ -21,6 +21,8 @@ export interface AgentDeskConfig {
   geminiApiKey: string | null; // Gemini embeddings need it even if another LLM thinks
   voyageApiKey: string | null;
   success?: (requests: RequestDoc[]) => boolean;
+  /** AGENTDESK_RESET_ADMIN_TOKEN=1: rotate the panel token and print a new link once (lost link recovery). */
+  resetAdminToken: boolean;
 }
 
 export const DEFAULT_MODEL: Record<LlmProvider, string> = {
@@ -69,7 +71,7 @@ export function resolveConfig(options: AgentDeskOptions = {}): AgentDeskConfig {
 
   const dbName = options.db || env.AGENTDESK_DB?.trim() || "agentdesk";
   const siteId = options.siteId || env.AGENTDESK_SITE_ID?.trim() || dbName;
-  const panelPath = normalizePath(options.panelPath || "/agentdesk");
+  const panelPath = normalizePath(options.panelPath);
 
   return {
     mongoUri,
@@ -80,10 +82,13 @@ export function resolveConfig(options: AgentDeskOptions = {}): AgentDeskConfig {
     geminiApiKey: gemini,
     voyageApiKey,
     success: options.success,
+    resetAdminToken: env.AGENTDESK_RESET_ADMIN_TOKEN === "1",
   };
 }
 
-function normalizePath(p: string): string {
-  const withSlash = p.startsWith("/") ? p : `/${p}`;
-  return withSlash.length > 1 ? withSlash.replace(/\/+$/, "") : withSlash;
+/** "/agentdesk" style, no trailing slash. Empty or "/" falls back to "/agentdesk": the panel must not shadow the site. */
+export function normalizePath(p: string | undefined): string {
+  const trimmed = (p ?? "").trim().replace(/\/+$/, "");
+  if (!trimmed) return "/agentdesk";
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }

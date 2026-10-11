@@ -18,7 +18,7 @@ export async function openEpisode(
   if (sessionId && SESSION_ID.test(sessionId)) {
     const existing = await ctx.cols.episodes.findOne({ sessionId, siteId: ctx.config.siteId });
     if (existing) {
-      rememberEpisode(sessionId, existing.episodeId);
+      rememberEpisode(sessionId, existing.episodeId, ctx);
       return existing;
     }
   }
@@ -45,7 +45,7 @@ export async function openEpisode(
     reflection: null,
   };
   await ctx.cols.episodes.insertOne(episode);
-  rememberEpisode(episode.sessionId, episode.episodeId);
+  rememberEpisode(episode.sessionId, episode.episodeId, ctx);
   return episode;
 }
 

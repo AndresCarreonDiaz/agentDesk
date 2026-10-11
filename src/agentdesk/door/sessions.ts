@@ -22,31 +22,60 @@ export function sessionFromHeaders(headers: IncomingHttpHeaders): string | null 
   return null;
 }
 
+/** Never throws: a malformed cookie from any visitor must not break the host. */
 export function readCookie(cookieHeader: string | undefined, name: string): string | null {
   if (!cookieHeader) return null;
   for (const part of cookieHeader.split(";")) {
     const [k, ...rest] = part.trim().split("=");
-    if (k === name) return decodeURIComponent(rest.join("="));
+    if (k !== name) continue;
+    try {
+      return decodeURIComponent(rest.join("="));
+    } catch {
+      return null;
+    }
   }
   return null;
 }
 
-// sessionId -> episodeId. The Door fills it when it creates an episode; misses go to the database.
-const episodeBySession = new Map<string, { episodeId: string | null; at: number }>();
-const NEGATIVE_CACHE_MS = 5_000;
+// sessionId -> episodeId, bounded. Positive hits come from the Door creating episodes or a
+// database hit; misses are cached briefly in a separate small map so made-up ids cannot grow memory.
+const MAX_POSITIVE = 10_000;
+const MAX_NEGATIVE = 1_000;
+const NEGATIVE_MS = 5_000;
+const positive = new Map<string, string>();
+const negative = new Map<string, number>();
 
-export function rememberEpisode(sessionId: string, episodeId: string): void {
-  episodeBySession.set(sessionId, { episodeId, at: Date.now() });
+function key(ctx: Pick<AgentDeskContext, "config">, sessionId: string): string {
+  return `${ctx.config.siteId}:${sessionId}`;
+}
+
+function remember(map: Map<string, any>, k: string, v: unknown, max: number): void {
+  map.delete(k);
+  map.set(k, v);
+  if (map.size > max) map.delete(map.keys().next().value as string);
+}
+
+export function rememberEpisode(sessionId: string, episodeId: string, ctx?: Pick<AgentDeskContext, "config">): void {
+  const k = ctx ? key(ctx, sessionId) : `*:${sessionId}`;
+  negative.delete(k);
+  remember(positive, k, episodeId, MAX_POSITIVE);
 }
 
 export async function episodeForSession(ctx: AgentDeskContext, sessionId: string): Promise<string | null> {
-  const hit = episodeBySession.get(sessionId);
-  if (hit && (hit.episodeId || Date.now() - hit.at < NEGATIVE_CACHE_MS)) return hit.episodeId;
+  const k = key(ctx, sessionId);
+  const hit = positive.get(k) ?? positive.get(`*:${sessionId}`);
+  if (hit) return hit;
+  const missAt = negative.get(k);
+  if (missAt && Date.now() - missAt < NEGATIVE_MS) return null;
+
   const episode = await ctx.cols.episodes.findOne(
     { sessionId, siteId: ctx.config.siteId },
-    { projection: { episodeId: 1 } },
+    { projection: { episodeId: 1 }, maxTimeMS: 1_000 },
   );
-  const episodeId = episode?.episodeId ?? null;
-  episodeBySession.set(sessionId, { episodeId, at: Date.now() });
-  return episodeId;
+  if (episode?.episodeId) {
+    remember(positive, k, episode.episodeId, MAX_POSITIVE);
+    return episode.episodeId;
+  }
+  remember(negative, k, Date.now(), MAX_NEGATIVE);
+  return null;
 }

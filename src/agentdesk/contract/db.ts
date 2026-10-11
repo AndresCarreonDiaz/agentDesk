@@ -112,11 +112,15 @@ export async function bootstrap(db: Db, config: AgentDeskConfig): Promise<Bootst
     }
   }
 
-  await Promise.all(
+  // Index failures are warnings, not a reason to turn the desk off.
+  const indexResults = await Promise.allSettled(
     INDEXES.map(({ collection, key, unique }) =>
       cols[collection].createIndex(key, unique ? { unique: true } : {}),
     ),
   );
+  indexResults.forEach((r, i) => {
+    if (r.status === "rejected") warnings.push(`index on ${INDEXES[i].collection} ${JSON.stringify(INDEXES[i].key)} not created: ${(r.reason as Error).message}`);
+  });
 
   const { settings, adminToken } = await ensureSettings(cols, config);
   if (settings.embedding.provider === "gemini" && config.voyageApiKey) {
@@ -134,6 +138,12 @@ async function ensureSettings(
   config: AgentDeskConfig,
 ): Promise<{ settings: SettingsDoc; adminToken: string | null }> {
   const found = await cols.settings.findOne({ _id: "settings" });
+  if (found && config.resetAdminToken) {
+    const adminToken = randomBytes(24).toString("base64url");
+    const adminTokenHash = hashToken(adminToken);
+    await cols.settings.updateOne({ _id: "settings" }, { $set: { adminTokenHash } });
+    return { settings: { ...found, adminTokenHash }, adminToken };
+  }
   if (found) return { settings: found, adminToken: null };
 
   const adminToken = randomBytes(24).toString("base64url");
