@@ -10,7 +10,7 @@
     "properties": { "sku": { "type": "string" }, "qty": { "type": "integer", "minimum": 1 } },
     "required": ["sku", "qty"]
   },
-  "mappedRequest": { "method": "POST", "path": "/cart/items", "bodyTemplate": { "sku": "{{sku}}", "qty": "{{qty}}" } },
+  "mappedRequests": [{ "method": "POST", "path": "/cart/items", "bodyTemplate": { "sku": "{{sku}}", "qty": "{{qty}}" } }],
   "stage": "approved",
   "sourceEpisodeId": "ep_fixture01",
   "sourceRequestId": "req_fixture02",
