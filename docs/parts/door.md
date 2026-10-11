@@ -17,7 +17,7 @@ See [CONTRACT.md](../CONTRACT.md) sections 1 to 5.
 
 ## Gives others
 
-- **The install:** `app.use(agentdesk())`. Reads `MONGODB_URI`, the LLM key and `VOYAGE_API_KEY` from env, uses its own `agentdesk` database, creates collections and vector indexes, prints the panel link once, mounts everything, and starts the Loop and the panel.
+- **The install:** `app.use(agentdesk())`. Reads `MONGODB_URI`, the LLM key (Gemini by default) and the optional `VOYAGE_API_KEY` from env, uses its own `agentdesk` database, locks the embedding provider in `settings`, creates collections and vector indexes, prints the panel link once, mounts everything, and starts the Loop and the panel.
 - **The tap:** records every request to the host app. Reads the session from the `x-agentdesk-session` header, then the `agentdesk_session` cookie. Sets `source`. Redacts passwords, cards and tokens.
 - **Discovery:** `/.well-known/agentdesk`, an `llms.txt` entry, and a `<link>` tag snippet for the host's HTML.
 - **`about` always ends with** "Call `list_actions` before `do`; actions are learned and change over time." Real agents may not know to call it.
@@ -34,7 +34,7 @@ See [CONTRACT.md](../CONTRACT.md) sections 1 to 5.
 
 ## Order
 
-1. `agentdesk()` boots: env, own database, collections, `settings`, panel link printed. Tap writes `requests`. **Hand off to Loop** (real requests).
+1. Shared helpers `contract/llm.ts` and `contract/embed.ts` (Loop needs them early). `agentdesk()` boots: env, own database, collections, `settings`, panel link printed. Tap writes `requests`. **Hand off to Loop** (real requests).
 2. Discovery and `about` / `ask` from `knowledge` (empty desk says "I don't know yet"). Session and episode created on first call; `done` works. **Hand off to Store's visitor agents.**
 3. Voyage intent match finds the fixture capability from a free-text request; `list_actions` returns it.
 4. `do` runs a capability (all its `mappedRequests`) and returns its result. Rules and stages block it, in `do` and in the tap.

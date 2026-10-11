@@ -17,7 +17,7 @@ See [CONTRACT.md](../CONTRACT.md) sections 2, 3 and 5.
 ## Gives others
 
 - **Demo store:** product list, product page, cart (`POST /cart/items`), fake checkout. Pages call a real JSON API underneath (the API is what the Loop learns from). **The cart is keyed by the `agentdesk_session` cookie**, so when the Door runs `add_to_cart` for an agent, it lands in that agent's cart.
-- **The install line in the store's server:** `app.use(agentdesk())`, plus `MONGODB_URI`, the LLM key and `VOYAGE_API_KEY` in `.env`. Nothing else.
+- **The install line in the store's server:** `app.use(agentdesk())`, plus `MONGODB_URI` and `GEMINI_API_KEY` in `.env` (`VOYAGE_API_KEY` optional). Nothing else.
 - **Visitor agents:** scripted agents that call the Door, fall back to clicking the site with Playwright (with the `agentdesk_session` cookie set), and finish with `done {goalSuccess, note}`. Same script for every visit (CONTRACT section 6).
 - **Developer panel** at `/agentdesk`: live feed, capabilities with approve/block, corrections, rules, **proposed rules from the reflector with their evidence and one-click approve/reject**, each episode's `reflection.diff` (what the success did that the failure did not), and the learning curve with failures before the first success. Feedback must be one click: approve, block, or "wrong, here is the right answer". Keep it thin: the desk is the product, not the panel.
 

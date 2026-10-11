@@ -13,9 +13,11 @@ npm i agentdesk
 ```bash
 # .env: MONGODB_URI is usually there already, because the site runs on MongoDB
 MONGODB_URI=...          # your own Atlas cluster: the desk's memory lives here
-ANTHROPIC_API_KEY=...    # or OPENAI_API_KEY: the desk thinks with your own LLM key
-VOYAGE_API_KEY=...       # embeddings for matching requests (today; the goal is zero extra keys)
+GEMINI_API_KEY=...       # or ANTHROPIC_API_KEY / OPENAI_API_KEY: the desk thinks with your own LLM key
+VOYAGE_API_KEY=...       # optional: embeddings for matching requests (Gemini makes them otherwise)
 ```
+
+Minimum: two keys, `MONGODB_URI` and `GEMINI_API_KEY`. Copy [.env.example](.env.example) to start.
 
 ```ts
 app.use(agentdesk())
