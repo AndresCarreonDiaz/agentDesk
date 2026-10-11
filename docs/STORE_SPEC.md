@@ -290,7 +290,7 @@ Body:
 
 Rules:
 
-- `sku` required string, `qty` integer ≥ 1 (default 1)
+- `sku` required string, `qty` integer ≥ 1 (default 1). In JSON, `qty` must be a **number**: `"one"` or `"2"` → `400` (the demo's failed visit, `fixtures/episode-cart-prior-fail.json`). Form posts are parsed.
 - Resolve variant from `products`
 - Reserve inventory
 - Upsert line: if sku already in cart, add qty

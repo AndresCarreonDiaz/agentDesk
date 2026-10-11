@@ -45,13 +45,13 @@ export function apiRouter(c: Collections, client: MongoClient) {
   r.post(['/api/cart/items', '/cart/items'], async (req, res) => {
     const b = body(req);
     const sku = requireString(b.sku, 'sku');
-    const qty = parseQty(b.qty, { min: 1, fallback: 1 });
+    const qty = parseQty(b.qty, { min: 1, fallback: 1, form: isForm(req) });
     const cart = await store.addItem(c, shopperId(res), sku, qty);
     reply(req, res, '/cart', { cart: cartJson(cart) }, 201);
   });
 
   r.patch('/api/cart/items/:sku', async (req, res) => {
-    const qty = parseQty(body(req).qty, { min: 0 });
+    const qty = parseQty(body(req).qty, { min: 0, form: isForm(req) });
     const cart = await store.setItemQty(c, shopperId(res), req.params.sku, qty);
     reply(req, res, '/cart', { cart: cartJson(cart) });
   });

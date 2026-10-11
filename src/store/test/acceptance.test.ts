@@ -145,6 +145,15 @@ test('same session gets a fresh cart after checkout; qty update and remove adjus
   assert.deepEqual(await stock('TOTE-NAT'), { _id: 'TOTE-NAT', productId: 'prod_canvas_tote', available: 100, reserved: 0, sold: 0 });
 });
 
+test('JSON qty must be a number: "one" and "2" get 400 (the demo\'s failed visit)', async () => {
+  for (const qty of ['one', '2']) {
+    const res = await call('POST', '/cart/items', { sku: 'MUG-BLUE', qty }, 'ses_textqty01');
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).error, 'bad_request');
+  }
+  assert.equal(await db.collection('carts').countDocuments({ shopperId: 'ses_textqty01', 'items.0': { $exists: true } }), 0);
+});
+
 test('cannot oversell', async () => {
   const res = await call('POST', '/api/cart/items', { sku: 'PEN-BLK', qty: 99 }, 'ses_other0001');
   assert.equal(res.status, 201);

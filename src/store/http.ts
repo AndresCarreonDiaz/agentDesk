@@ -27,11 +27,17 @@ export function unflatten(flat: Record<string, unknown>): Record<string, unknown
   return out;
 }
 
-export function parseQty(value: unknown, { min, fallback }: { min: number; fallback?: number }): number {
+// JSON callers must send qty as a number, like the pages do: {"qty": 2}, not {"qty": "2"}.
+// That strictness is what lets AgentDesk learn the right input type from a failed call.
+// HTML form posts are always text, so they are parsed.
+export function parseQty(
+  value: unknown,
+  { min, fallback, form }: { min: number; fallback?: number; form: boolean },
+): number {
   if ((value === undefined || value === '') && fallback !== undefined) return fallback;
-  const n = typeof value === 'string' ? Number(value) : value;
+  const n = form && typeof value === 'string' ? Number(value) : value;
   if (typeof n !== 'number' || !Number.isInteger(n) || n < min || n > 99) {
-    throw new HttpError(400, 'bad_request', `qty must be an integer from ${min} to 99.`);
+    throw new HttpError(400, 'bad_request', `qty must be a whole number from ${min} to 99, sent as a number (e.g. "qty": 2).`);
   }
   return n;
 }
