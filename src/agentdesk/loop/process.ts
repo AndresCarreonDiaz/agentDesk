@@ -68,6 +68,11 @@ export async function processEpisode(ctx: AgentDeskContext, episodeId: string): 
   const episode: EpisodeDoc = { ...stored, ...close, outcome };
   const learned: Learned[] = [];
 
+  // Live visits carry no intents yet, so core cannot pair them with a failure. Pair by site and write route.
+  const priorFailureId =
+    close.priorFailureId ??
+    (episode.intents.length === 0 ? await findPriorFailureByRoute(ctx, episode, sessionRequests, siteEpisodes) : null);
+
   // ---- new capability from a successful fallback sequence ----
   if (close.siteSuccess === true) {
     const draft = buildCapability(episode as LoopEpisode, sessionRequests);
@@ -80,8 +85,8 @@ export async function processEpisode(ctx: AgentDeskContext, episodeId: string): 
   // ---- lesson from a failure that this visit fixed ----
   let diff: string | null = null;
   const succeeded = outcome === "success" && close.siteSuccess !== false;
-  if (close.priorFailureId && succeeded) {
-    const prior = siteEpisodes.find((e) => e.episodeId === close.priorFailureId);
+  if (priorFailureId && succeeded) {
+    const prior = siteEpisodes.find((e) => e.episodeId === priorFailureId);
     if (prior) {
       const priorRequests = (await ctx.cols.requests.find({ sessionId: prior.sessionId }).toArray()).filter(hasSession);
       const { changes } = diffEpisodes(priorRequests, sessionRequests);
@@ -97,7 +102,7 @@ export async function processEpisode(ctx: AgentDeskContext, episodeId: string): 
   // ---- capabilities this visit called ----
   const capabilities = await ctx.cols.capabilities.find({ siteId }, { projection: { embedding: 0 } }).toArray();
   const called = capabilities.filter((cap) => callsCapability(episode, sessionRequests, cap));
-  const stageChanges = await updateCalledCapabilities(ctx, episode, called, siteEpisodes, firstPass, close);
+  const stageChanges = await updateCalledCapabilities(ctx, episode, called, siteEpisodes, close);
   for (const id of stageChanges) learned.push({ kind: "capability", id });
 
   // ---- proposed guardrails ----
@@ -120,7 +125,7 @@ export async function processEpisode(ctx: AgentDeskContext, episodeId: string): 
         siteSuccess: close.siteSuccess,
         steps: close.steps,
         durationMs: close.durationMs,
-        priorFailureId: close.priorFailureId,
+        priorFailureId,
         outcome,
         reflection,
       },
@@ -256,13 +261,12 @@ function callsCapability(episode: EpisodeDoc, requests: readonly SessionRequest[
   );
 }
 
-/** Stats and stages for the capabilities this episode called. Returns the ids whose stage changed. */
+/** Stages for the capabilities this episode called. The Door owns `stats`. Returns the ids whose stage changed. */
 async function updateCalledCapabilities(
   ctx: AgentDeskContext,
   episode: EpisodeDoc,
   called: CapabilityDoc[],
   siteEpisodes: EpisodeDoc[],
-  firstPass: boolean,
   close: Close,
 ): Promise<string[]> {
   if (called.length === 0) return [];
@@ -307,15 +311,36 @@ async function updateCalledCapabilities(
       set.verifiedByEpisodeId = next === "verified" ? history[history.length - 1].episodeId : null;
       changed.push(cap.capabilityId);
     }
-    await ctx.cols.capabilities.updateOne(
-      { capabilityId: cap.capabilityId },
-      {
-        $set: set,
-        ...(firstPass ? { $inc: { "stats.calls": 1, "stats.successes": close.siteSuccess === true ? 1 : 0 } } : {}),
-      },
-    );
+    await ctx.cols.capabilities.updateOne({ capabilityId: cap.capabilityId }, { $set: set });
   }
   return changed;
+}
+
+/** Latest earlier failed episode of the site with a failed write (>= 400) to a route this episode also wrote to. */
+async function findPriorFailureByRoute(
+  ctx: AgentDeskContext,
+  episode: EpisodeDoc,
+  mine: readonly SessionRequest[],
+  siteEpisodes: readonly EpisodeDoc[],
+): Promise<string | null> {
+  const routeKey = (r: { method: string; path: string }) => `${r.method.toUpperCase()} ${r.path.split("?")[0]}`;
+  const routes = new Set(mine.filter(isWrite).map(routeKey));
+  if (routes.size === 0) return null;
+  const created = ms(episode.createdAt);
+  const candidates = siteEpisodes
+    .filter((e) => ms(e.createdAt) < created && (e.goalSuccess === false || e.siteSuccess === false))
+    .sort((a, b) => ms(b.createdAt) - ms(a.createdAt));
+  if (candidates.length === 0) return null;
+  const theirs = (
+    await ctx.cols.requests.find({ sessionId: { $in: candidates.map((e) => e.sessionId) } }).toArray()
+  ).filter(hasSession);
+  for (const cand of candidates) {
+    const hit = theirs.some(
+      (r) => r.sessionId === cand.sessionId && isWrite(r) && r.status >= 400 && routes.has(routeKey(r)),
+    );
+    if (hit) return cand.episodeId;
+  }
+  return null;
 }
 
 // ---------- knowledge ----------
@@ -407,6 +432,7 @@ function matchKey(match: RuleDoc["compiled"]["match"]): string {
 // ---------- reflection ----------
 
 function classify(episode: EpisodeDoc, requests: readonly SessionRequest[], calledCapability: boolean): FailureKind | null {
+  if (requests.length === 0) return episode.goalSuccess === false ? "unknown_site" : null;
   if (episode.goalSuccess === true && episode.siteSuccess !== false) return null;
   if (episode.outcome === "blocked" || requests.some((r) => isWrite(r) && r.status === 403)) return "blocked";
   if (calledCapability) return "capability_failed";
@@ -473,6 +499,7 @@ async function explain(
   called: CapabilityDoc[],
   diff: string | null,
 ): Promise<string> {
+  if (requests.length === 0) return "No requests reached the site during this visit.";
   const fallback = deterministicWhy(episode, failure, requests, called, diff);
   // A visit that went fine has nothing to explain beyond the deterministic line.
   if (failure === null && !diff) return fallback;
@@ -481,12 +508,15 @@ async function explain(
       ctx.llm.text({
         system:
           "You explain why an AI agent's visit to a website went the way it did, for the site's developer. " +
+          "State only what the facts below show: never guess at causes, intentions or details they do not give. " +
           "Answer with exactly one plain sentence, under 220 characters, no markdown.",
         prompt: [
           `Goal: ${episode.goal ?? "unknown"}`,
           `Agent's own words at the end: ${episode.doneNote ?? "none"}`,
           `Failure kind: ${failure ?? "none (the visit succeeded)"}`,
-          `Site requests: ${requests.map((r) => routeLine(r)).join("; ") || "none"}`,
+          `Site requests (method, path, status, body shape): ${requests
+            .map((r) => `${routeLine(r)}, body fields ${JSON.stringify(r.bodyShape ?? {})}`)
+            .join("; ")}`,
           `Learned actions called: ${called.map((c) => c.name).join(", ") || "none"}`,
           `Difference from the earlier failed visit: ${diff ?? "none"}`,
         ].join("\n"),
