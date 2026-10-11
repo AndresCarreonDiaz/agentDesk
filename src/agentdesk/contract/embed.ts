@@ -33,26 +33,42 @@ export function createEmbedder(settings: EmbeddingSettings, config: AgentDeskCon
         "AgentDesk: this database is locked to Voyage embeddings but VOYAGE_API_KEY is missing. Add it back to .env.",
       );
     }
-    embedBatch = async (texts, kind) => {
-      const res = await withRetry(async () => {
-        const r = await fetch("https://api.voyageai.com/v1/embeddings", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-          body: JSON.stringify({
-            input: texts,
-            model: settings.model,
-            input_type: kind,
-            output_dimension: settings.dims,
-          }),
-        });
-        if (!r.ok) {
-          const error = new Error(`Voyage embeddings failed: HTTP ${r.status} ${await r.text()}`);
-          (error as Error & { status: number }).status = r.status;
-          throw error;
-        }
-        return (await r.json()) as { data: { embedding: number[]; index: number }[] };
+    // A key made in Atlas (AI Model APIs) only works on ai.mongodb.com; a key made on voyageai.com
+    // only works on api.voyageai.com. Try Atlas first, switch once on an auth error, and remember.
+    const endpoints = config.voyageBaseUrl
+      ? [config.voyageBaseUrl]
+      : ["https://ai.mongodb.com/v1/embeddings", "https://api.voyageai.com/v1/embeddings"];
+    let working: string | null = config.voyageBaseUrl ?? null;
+
+    const call = async (url: string, texts: string[], kind: EmbedKind) => {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+        body: JSON.stringify({ input: texts, model: settings.model, input_type: kind, output_dimension: settings.dims }),
       });
-      return res.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
+      if (!r.ok) {
+        const error = new Error(`Voyage embeddings failed at ${new URL(url).host}: HTTP ${r.status} ${(await r.text()).slice(0, 300)}`);
+        (error as Error & { status: number }).status = r.status;
+        throw error;
+      }
+      return (await r.json()) as { data: { embedding: number[]; index: number }[] };
+    };
+
+    embedBatch = async (texts, kind) => {
+      const tryOrder = working ? [working] : endpoints;
+      let lastError: unknown;
+      for (const url of tryOrder) {
+        try {
+          const res = await withRetry(() => call(url, texts, kind));
+          working = url;
+          return res.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
+        } catch (err) {
+          lastError = err;
+          const status = (err as { status?: number }).status;
+          if (status !== 401 && status !== 403) throw err; // only an auth error means "wrong endpoint for this key"
+        }
+      }
+      throw lastError;
     };
   } else {
     const key = config.geminiApiKey;
