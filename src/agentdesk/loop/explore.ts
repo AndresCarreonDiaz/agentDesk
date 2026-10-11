@@ -106,15 +106,31 @@ async function read(base: string, path: string): Promise<Page | null> {
   }
 }
 
-/** Same-origin pages worth reading for forms: one per kind of page (/products/:slug, /cart, /checkout...). */
-function pickPages(base: string, sources: string[]): string[] {
-  const origin = new URL(base).origin;
+/**
+ * The site's own origins: where the desk reads it (the local socket) and its public URL. Behind a host
+ * like Modelence the pages link to the public URL (SITE_URL), which is the same site.
+ */
+function siteOrigins(base: string): string[] {
+  const origins = [new URL(base).origin];
+  for (const url of [process.env.SITE_URL, process.env.AGENTDESK_SITE_URL]) {
+    try {
+      if (url) origins.push(new URL(url).origin);
+    } catch {
+      // not a URL
+    }
+  }
+  return origins;
+}
+
+/** Same-site pages worth reading for forms: one per kind of page (/products/:slug, /cart, /checkout...). */
+export function pickPages(base: string, sources: string[]): string[] {
+  const origins = siteOrigins(base);
   const found = new Set<string>();
   for (const s of sources) {
     for (const m of s.matchAll(/(?:href="|\]\(|<loc>)([^")<\s]+)/g)) {
       try {
         const u = new URL(m[1], base);
-        if (u.origin !== origin) continue;
+        if (!origins.includes(u.origin)) continue;
         if (/\.(png|jpe?g|gif|svg|css|js|xml|txt|ico|webp)$/i.test(u.pathname)) continue;
         found.add(u.pathname);
       } catch {
@@ -201,7 +217,7 @@ export interface FormFact {
 
 /** Forms on a page, with the real method (a hidden _method turns POST into PATCH or DELETE). */
 export function formsOf(base: string, page: Pick<Page, "path" | "text" | "title">): FormFact[] {
-  const origin = new URL(base).origin;
+  const origins = siteOrigins(base);
   const out: FormFact[] = [];
   for (const m of page.text.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
     const attrs = m[1];
@@ -213,7 +229,7 @@ export function formsOf(base: string, page: Pick<Page, "path" | "text" | "title"
     } catch {
       continue;
     }
-    if (url.origin !== origin) continue;
+    if (!origins.includes(url.origin)) continue;
     let method = (attr(attrs, "method") ?? "GET").toUpperCase();
     const fields: FormFact["fields"] = [];
     for (const f of inner.matchAll(/<(input|select|textarea)\b([^>]*)>/gi)) {
