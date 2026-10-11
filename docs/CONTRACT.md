@@ -185,7 +185,18 @@ Door enforces only `active` rules, and on **both paths**: the `do` tool and the 
 
 ```ts
 { _id: "settings"; siteId: string; adminTokenHash: string; installedAt: Date;
-  embedding: { provider: "voyage" | "gemini"; model: string; dims: number } }   // locked at first start
+  embedding: { provider: "voyage" | "gemini"; model: string; dims: number };   // locked at first start
+  autopilot: boolean }   // section 4, "Autopilot"; default from AGENTDESK_AUTOPILOT (on), the panel toggles it
+```
+
+### `audit` (written by Door when autopilot runs an unreviewed write, and by the panel's toggle)
+
+```ts
+{ auditId: string; actor: "autopilot" | "developer";
+  action: "ran_unreviewed" | "autopilot_on" | "autopilot_off";
+  capabilityId: string | null; capabilityName: string | null;
+  episodeId: string | null; sessionId: string | null; ok: boolean | null;
+  detail: string }   // plain language, shown in the panel
 ```
 
 ## 4. Capability lifecycle
@@ -204,14 +215,24 @@ observed -> proposed -> verified -> approved
 | demoted | Loop | A `verified` capability whose calls fail in 2 episodes in a row goes back to `proposed`, and the reflector repairs it (section 4b). |
 | `approved` / `blocked` | Panel | The developer's decision always wins. |
 
-What the Door offers to agents:
+What the Door offers to agents (`isOffered` in `contract/types.ts`):
 
 | kind | Offered at stages |
 |---|---|
 | `read` | `proposed`, `verified`, `approved` |
-| `write` | `approved` only |
+| `write` | `approved`; **on autopilot also `proposed` and `verified`**, unless it moves money |
 
 Never offered: `observed`, `blocked`, or anything an active rule blocks.
+
+### Autopilot
+
+The developer should not have to approve every action, or the desk gets stuck. `settings.autopilot` (on by default; `AGENTDESK_AUTOPILOT=off` starts a new database with it off; the panel toggles it with `setAutopilot(ctx, on)` from `contract/autopilot.ts`):
+
+- **On:** learned everyday writes (add to cart, apply a filter, request a quote) go live for agents as soon as they are `proposed`. The developer reviews later.
+- **Money always asks:** a write that looks like checkout, payment, an order, a refund or a transfer (`isSensitive`: its name, path, or payment fields like card, iban, amount) waits for `approved` even on autopilot.
+- **Audit:** every time `do` runs a write that is not `approved`, the Door writes an `audit` entry (`actor: "autopilot"`, `action: "ran_unreviewed"`). The panel lists them: approve keeps it, block stops it. Turning autopilot on or off is audited too.
+- **Rules still win:** active rules and `blocked` are always refused, on autopilot or not.
+- **Why it is safe:** the Door only replays requests the host app already accepted from an agent on its own website, through the same endpoint, session and validation. Autopilot adds speed, not new permissions.
 
 ### Success oracle: the site's evidence, not the agent's word
 
@@ -265,7 +286,8 @@ The Store part owns the panel code (inside the package) and the demo store, whic
 | `intents` | writes | reads | reads |
 | `rules` | reads, enforces `active` rules in `do` and in the tap | writes `proposed` rules only | writes developer rules; sets `active` / `rejected` |
 | `feedback` | – | reads | writes |
-| `settings` | writes on first start | – | reads (admin token) |
+| `settings` | writes on first start; reads `autopilot` | – | reads (admin token); toggles `autopilot` with `setAutopilot` |
+| `audit` | writes `ran_unreviewed` | – | reads; `setAutopilot` writes the toggle lines |
 
 `goalSuccess`: the visitor agent reports it with the `done` tool or `POST /agent/done {sessionId, goalSuccess, note?}` (the Door saves it). The visitor agent never sets a capability stage.
 
@@ -286,3 +308,4 @@ The Store part owns the panel code (inside the package) and the demo store, whic
 - v3.1: `siteSuccess` uses the last attempt per method + path, so a fixed retry counts as success (committee red-team of the Loop oracle). The deterministic Loop core is graded by the frozen oracle in `verify/` (see `verify/README.md`).
 - v4.1: default model is `gemini-3.8-flash`; Google closed `gemini-2.5-flash` to new keys.
 - v4.2: template syntax for agent input in `mappedRequests`: `"{{sku}}"` or `"{{input.sku}}"` (the Door accepts both; the Loop writes the bare form).
+- v5: Autopilot. `settings.autopilot` (on by default): learned writes are offered at `proposed` / `verified` without approval, except money (`isSensitive`), which still needs `approved`. New `audit` collection: the Door records every unreviewed write it runs; the panel reviews and toggles. Rules and `blocked` always win.
