@@ -37,7 +37,22 @@ Built at the Harness Engineering & Model Wrangling #SFTechWeek Hackathon (MongoD
 - **Recursive Harnessing:** AgentDesk evolves its own tools, answers and guardrails to fit the specific platform it was dropped into.
 - **Long Horizon Engineering:** it keeps a memory of every visit, every failure and every correction, and optimises against hard numbers (success, steps, time).
 
-Built on MongoDB Atlas (Atlas Agent Engine memory and governance, Vector Search with Voyage AI), with Raindrop for agent signals and Modelence for hosting.
+## Hackathon tools we use
+
+| Tool | What AgentDesk uses it for |
+|---|---|
+| **MongoDB Atlas** (hackathon sandbox cluster) | The desk's whole memory: episodes, tapped requests, knowledge, capabilities, rules and developer feedback, as flexible documents that fit any host platform |
+| **Atlas Agent Engine: memory** | Episodic (each agent visit), semantic (facts about the platform), procedural (learned capabilities and flows), taxonomic (intents and agent families) |
+| **Atlas Agent Engine: guardrails** | Developer rules ("no discount codes") compiled into content guardrails that block, modify or require review, live on the next request |
+| **Atlas Agent Engine: Policy Engine** | Tool allowlist built from approved capabilities, plus caps on tool calls and tokens per visit, so a blocked capability cannot be called even if the model tries |
+| **Atlas Agent Engine: traces** | Execution traces behind the desk's "why it happened" explanation for each visit |
+| **Voyage AI + Atlas Vector Search** | Matching a visitor's free-text request to the right intent and capability |
+| **Atlas change streams** | Live feed of visits and newly learned capabilities in the developer panel |
+| **Raindrop** | Hard signals per visit (success, abandon, steps, seconds, unanswered questions, policy denials) and Experiments to A/B desk versions |
+| **Modelence** | Hosts the demo store with AgentDesk inside, which is the public demo link |
+| **Cursor, AWS Kiro, MongoDB MCP server** | Build tooling during the event |
+
+If Atlas Agent Engine is not enabled in the sandbox, AgentDesk enforces the same rules and allowlist itself from its Atlas collections.
 
 ## Status
 
