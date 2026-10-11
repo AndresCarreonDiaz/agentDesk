@@ -9,7 +9,8 @@ import { newId } from "../src/agentdesk/contract/ids.js";
 
 const dbName = process.env.AGENTDESK_DB || "agentdesk_smoke";
 const app = express();
-app.use(agentdesk({ db: dbName }));
+const desk = agentdesk({ db: dbName });
+app.use(desk);
 app.use(express.json());
 app.get("/products", (_req, res) => {
   res.json([{ sku: "MUG-BLUE", name: "Blue mug", price: 12 }]);
@@ -20,6 +21,8 @@ app.post("/cart/items", (req, res) => {
 
 const server = app.listen(0);
 await new Promise((r) => server.once("listening", r));
+const t = Date.now();
+console.log("desk ready:", await desk.ready, `${Date.now() - t} ms`);
 const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
 const sessionId = newId("ses");

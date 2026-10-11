@@ -24,7 +24,10 @@ type State =
 const BOOT_WAIT_MS = 3_000;
 const RETRY_MS = [5_000, 30_000, 120_000];
 
-export function agentdesk(options: AgentDeskOptions = {}, log: Logger = consoleLogger): Router {
+/** The installed middleware. `ready` resolves to true once the desk is serving (false if it is off). */
+export type AgentDeskMiddleware = Router & { ready: Promise<boolean> };
+
+export function agentdesk(options: AgentDeskOptions = {}, log: Logger = consoleLogger): AgentDeskMiddleware {
   const panelPath = normalizePath(options.panelPath);
   const deadline = Date.now() + BOOT_WAIT_MS;
   let state: State = { kind: "booting" };
@@ -44,6 +47,7 @@ export function agentdesk(options: AgentDeskOptions = {}, log: Logger = consoleL
     });
 
   async function boot(): Promise<void> {
+    const started = Date.now();
     const { ctx, adminToken } = await createContext({ ...options, panelPath }, log);
     // Print the link before any other part runs, so a failing part can never lose it.
     if (adminToken) log.info(`your private panel link (shown once, keep it): ${ctx.config.panelPath}?token=${adminToken}`);
@@ -56,7 +60,7 @@ export function agentdesk(options: AgentDeskOptions = {}, log: Logger = consoleL
       log.error("panel failed to start; agents are still served", err);
     }
     state = { kind: "ready", handler, ctx };
-    log.info(`ready for site "${ctx.config.siteId}" (database "${ctx.config.dbName}", ${ctx.llm.provider} ${ctx.llm.model}, ${ctx.settings.embedding.provider} embeddings)`);
+    log.info(`ready in ${Date.now() - started} ms for site "${ctx.config.siteId}" (database "${ctx.config.dbName}", ${ctx.llm.provider} ${ctx.llm.model}, ${ctx.settings.embedding.provider} embeddings)`);
 
     // The Loop runs in the background: it never gates the door.
     Promise.resolve()
@@ -92,7 +96,7 @@ export function agentdesk(options: AgentDeskOptions = {}, log: Logger = consoleL
     next();
   }
 
-  return outer;
+  return Object.assign(outer, { ready: firstBoot.then(() => (state as State).kind === "ready") });
 }
 
 function isDeskRoute(path: string, panelPath: string): boolean {

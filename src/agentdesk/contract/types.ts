@@ -153,6 +153,8 @@ export interface SettingsDoc {
   installedAt: Date;
   embedding: EmbeddingSettings; // locked at first start
   createdAt: Date;
+  /** Collections and indexes are created once per schema version, so later starts are fast. */
+  schemaVersion?: number;
 }
 
 // What the Door offers to agents (CONTRACT section 4).

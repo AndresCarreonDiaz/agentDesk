@@ -98,19 +98,33 @@ export interface BootstrapResult {
   warnings: string[];
 }
 
+/** Bump when collections or regular indexes change; installs re-create them once. */
+export const SCHEMA_VERSION = 1;
+
 export async function bootstrap(db: Db, config: AgentDeskConfig): Promise<BootstrapResult> {
   const cols = collections(db);
   const warnings: string[] = [];
 
-  const existing = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name));
-  for (const name of Object.values(COLLECTIONS)) {
-    if (existing.has(name)) continue;
-    try {
-      await db.createCollection(name);
-    } catch (err) {
-      if (!(err instanceof MongoServerError && err.codeName === "NamespaceExists")) throw err;
+  // Fast path: this database was already set up for this schema version.
+  const current = await cols.settings.findOne({ _id: "settings" });
+  if (current?.schemaVersion === SCHEMA_VERSION) {
+    const { settings, adminToken } = await ensureSettings(cols, config, current);
+    if (settings.embedding.provider === "gemini" && config.voyageApiKey) {
+      warnings.push("VOYAGE_API_KEY is set, but this database is locked to Gemini embeddings from its first start. Keeping Gemini.");
     }
+    return { settings, adminToken, warnings };
   }
+
+  const existing = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name));
+  await Promise.all(
+    Object.values(COLLECTIONS)
+      .filter((name) => !existing.has(name))
+      .map((name) =>
+        db.createCollection(name).catch((err) => {
+          if (!(err instanceof MongoServerError && err.codeName === "NamespaceExists")) throw err;
+        }),
+      ),
+  );
 
   // Index failures are warnings, not a reason to turn the desk off.
   const indexResults = await Promise.allSettled(
@@ -122,22 +136,26 @@ export async function bootstrap(db: Db, config: AgentDeskConfig): Promise<Bootst
     if (r.status === "rejected") warnings.push(`index on ${INDEXES[i].collection} ${JSON.stringify(INDEXES[i].key)} not created: ${(r.reason as Error).message}`);
   });
 
-  const { settings, adminToken } = await ensureSettings(cols, config);
+  const { settings, adminToken } = await ensureSettings(cols, config, current);
+  if (indexResults.every((r) => r.status === "fulfilled")) {
+    await cols.settings.updateOne({ _id: "settings" }, { $set: { schemaVersion: SCHEMA_VERSION } });
+  }
   if (settings.embedding.provider === "gemini" && config.voyageApiKey) {
     warnings.push(
       "VOYAGE_API_KEY is set, but this database is locked to Gemini embeddings from its first start. Keeping Gemini.",
     );
   }
 
-  warnings.push(...(await ensureVectorIndexes(cols, settings.embedding.dims)));
+  // Vector indexes build in the background (createContext starts them): search falls back to
+  // in-process cosine until they are queryable, so they never slow down the first start.
   return { settings, adminToken, warnings };
 }
 
 async function ensureSettings(
   cols: Collections,
   config: AgentDeskConfig,
+  found: SettingsDoc | null,
 ): Promise<{ settings: SettingsDoc; adminToken: string | null }> {
-  const found = await cols.settings.findOne({ _id: "settings" });
   if (found && config.resetAdminToken) {
     const adminToken = randomBytes(24).toString("base64url");
     const adminTokenHash = hashToken(adminToken);
@@ -169,13 +187,13 @@ async function ensureSettings(
   }
 }
 
-async function ensureVectorIndexes(cols: Collections, dims: number): Promise<string[]> {
+export async function ensureVectorIndexes(cols: Collections, dims: number): Promise<string[]> {
   const warnings: string[] = [];
-  for (const [name, filters] of Object.entries(VECTOR_FILTERS) as [keyof Collections, string[]][]) {
+  await Promise.all((Object.entries(VECTOR_FILTERS) as [keyof Collections, string[]][]).map(async ([name, filters]) => {
     const col = cols[name] as unknown as Collection<Document>;
     try {
       const current = await col.listSearchIndexes(VECTOR_INDEX_NAME).toArray();
-      if (current.length > 0) continue;
+      if (current.length > 0) return;
       await col.createSearchIndex({
         name: VECTOR_INDEX_NAME,
         type: "vectorSearch",
@@ -191,7 +209,7 @@ async function ensureVectorIndexes(cols: Collections, dims: number): Promise<str
       // in-process cosine similarity (contract/search.ts), which is fine at hackathon scale.
       warnings.push(`vector index on ${name} not created (${(err as Error).message}); using in-process search`);
     }
-  }
+  }));
   return warnings;
 }
 
