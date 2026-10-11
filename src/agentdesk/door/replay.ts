@@ -2,8 +2,8 @@ import type { MappedRequest } from "../contract/types.js";
 import { REPLAY_HEADER, REPLAY_SECRET, SESSION_COOKIE, SESSION_HEADER } from "./sessions.js";
 
 // `do` runs a capability by replaying its mappedRequests through the host app, in order
-// (CONTRACT section 3). Templates: "{{input.sku}}" from the agent's input, and
-// "{{steps[0].body.quoteId}}" from an earlier step's response.
+// (CONTRACT section 3). Templates: "{{input.sku}}" (or the Loop's bare "{{sku}}") from the
+// agent's input, and "{{steps[0].body.quoteId}}" from an earlier step's response.
 
 export interface StepResult {
   method: string;
@@ -44,7 +44,9 @@ export function fillTemplate(template: unknown, rc: ReplayContext): unknown {
 
 function lookup(expr: string, rc: ReplayContext): unknown {
   // input.sku | steps[0].body.quoteId | steps.0.body.quoteId
+  // A bare name ({{sku}}, what the Loop's buildCapability writes) means input.sku.
   const parts = expr.replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean);
+  if (parts[0] !== "input" && parts[0] !== "steps") parts.unshift("input");
   let cur: unknown = rc;
   for (const p of parts) {
     if (cur === null || cur === undefined || typeof cur !== "object") return undefined;
