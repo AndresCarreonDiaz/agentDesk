@@ -3,7 +3,7 @@ import type { AgentDeskContext } from "../contract/context.js";
 import type { EpisodeDoc, Turn } from "../contract/types.js";
 import { route } from "./brain.js";
 import { appendTurns, markDone, openEpisode } from "./episodes.js";
-import { SESSION_HEADER, sessionFromHeaders } from "./sessions.js";
+import { SESSION_COOKIE, SESSION_HEADER, sessionFromHeaders } from "./sessions.js";
 import { about, ask, doAction, listActions, TOOL_NAMES, type ToolName, type ToolResult } from "./tools.js";
 
 // POST /agent: the five tools over plain HTTP (CONTRACT section 4, parts/door.md).
@@ -51,12 +51,15 @@ export function hostBaseUrl(req: Request): string {
   return `${req.protocol}://${req.get("host")}`;
 }
 
+const READ_TOOLS = new Set<ToolName>(["about", "ask", "list_actions"]);
+
 const USAGE = {
   about: "POST /agent { \"message\": \"what can I do here?\" }",
   tools: TOOL_NAMES,
   direct: "POST /agent { \"tool\": \"list_actions\" } or POST /agent/do { \"action\": \"add_to_cart\", \"input\": { ... } }",
   done: "POST /agent/done { \"sessionId\": \"ses_...\", \"goalSuccess\": true, \"note\": \"...\" }",
   session: `Send the ${SESSION_HEADER} header (or sessionId in the body) from the first response on every later call, and as the agentdesk_session cookie if you use the website.`,
+  read: "Just reading? Open GET /agent/about, /agent/list_actions or /agent/ask?question=... (no body needed).",
   mcp: "The same five tools over MCP at /mcp.",
 };
 
@@ -67,6 +70,41 @@ export function createAgentRouter(ctx: AgentDeskContext): Router {
   // Teaching response (Bubblio lesson): a GET explains how to use the door.
   router.get("/", (_req, res) => {
     res.status(405).set("Allow", "POST").json({ error: "use_post", usage: USAGE });
+  });
+
+  // Read-only doors a browsing agent can simply open (GET /agent/about, /agent/ask?question=...,
+  // /agent/list_actions). They also hand out the session cookie, so the agent's later clicks on the
+  // website join this same visit and the desk can learn from them. Writes (do, done) stay POST.
+  router.get("/:tool", async (req, res) => {
+    const tool = req.params.tool as ToolName;
+    if (!READ_TOOLS.has(tool)) {
+      res.status(405).set("Allow", "POST").json({ error: "use_post", message: `${tool} changes something or ends a visit, so it needs POST.`, usage: USAGE });
+      return;
+    }
+    try {
+      const episode = await openEpisode(ctx, sessionFromHeaders(req.headers), req.headers);
+      res.setHeader(SESSION_HEADER, episode.sessionId);
+      res.cookie(SESSION_COOKIE, episode.sessionId, { path: "/", sameSite: "lax", httpOnly: true, maxAge: 60 * 60 * 1000 });
+      const q = (k: string) => (typeof req.query[k] === "string" ? String(req.query[k]).slice(0, 2000) : undefined);
+      const input = tool === "ask" ? { question: q("question") ?? q("q") ?? "" } : tool === "list_actions" ? { query: q("query") ?? q("q") } : {};
+      const result = await runTool(ctx, episode, { tool, input, baseUrl: hostBaseUrl(req) });
+
+      const now = new Date();
+      await appendTurns(ctx, episode.episodeId, [
+        { role: "agent", text: `${tool} ${JSON.stringify(input)}`.slice(0, 2000), at: now },
+        { role: "desk", text: result.reply.slice(0, 4000), at: now },
+      ]);
+
+      // A browser (or a browsing agent) gets plain text; a program gets JSON.
+      if (req.accepts(["application/json", "text/html"]) === "text/html") {
+        res.type("text/plain").send(`${result.reply}\n\nMore: /agent/about, /agent/list_actions, /agent/ask?question=... To run an action: POST /agent/do {"action": "...", "input": {...}} or use MCP at /mcp.`);
+        return;
+      }
+      res.json({ sessionId: episode.sessionId, tool, reply: result.reply, ...(result.data !== undefined ? { data: result.data } : {}) });
+    } catch (err) {
+      ctx.log.error("agent: read request failed", err);
+      if (!res.headersSent) res.status(500).json({ error: "desk_error", message: "The desk had a problem. You can still use the website directly." });
+    }
   });
 
   router.post(["/", "/:tool"], async (req, res) => {

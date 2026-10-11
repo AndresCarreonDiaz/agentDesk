@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { AgentDeskContext } from "../contract/context.js";
 import { rememberHostBaseUrl } from "../contract/site.js";
 import { createAgentRouter, hostBaseUrl } from "./agent-route.js";
+import { createDiscovery, mcpServerCard, siteBase } from "./discovery.js";
 import { createMcpRouter } from "./mcp.js";
 import { SESSION_HEADER } from "./sessions.js";
 import { createTap } from "./tap.js";
@@ -10,7 +11,7 @@ import { LIST_ACTIONS_HINT, TOOL_NAMES } from "./tools.js";
 // Door: the tap, discovery, POST /agent, /mcp (docs/parts/door.md).
 
 /** Paths the desk serves itself. Never the host's own files (llms.txt, robots.txt stay the host's). */
-export const DOOR_PATHS = ["/agent", "/mcp", "/.well-known/agentdesk"];
+export const DOOR_PATHS = ["/agent", "/mcp", "/.well-known/agentdesk", "/.well-known/mcp", "/.well-known/mcp.json"];
 
 export function createDoorRouter(ctx: AgentDeskContext): Router {
   const router = Router();
@@ -19,7 +20,13 @@ export function createDoorRouter(ctx: AgentDeskContext): Router {
     rememberHostBaseUrl(ctx, hostBaseUrl(req));
     next();
   });
+  router.use(createDiscovery()); // Link header on every page, and the agents section in the site's llms.txt
   router.use(createTap(ctx, { ownPaths: [...DOOR_PATHS, ctx.config.panelPath] }));
+
+  // The standard place an MCP client looks for a server card.
+  router.get(["/.well-known/mcp", "/.well-known/mcp.json"], (req, res) => {
+    res.json(mcpServerCard(ctx, siteBase(req)));
+  });
 
   router.get("/.well-known/agentdesk", (_req, res) => {
     res.json({
