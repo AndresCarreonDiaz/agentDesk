@@ -52,7 +52,7 @@ On first start, `agentdesk()`:
 
 ### Thinking and embeddings: one helper each, shared by every part
 
-- **LLM:** the first key found, in this order: `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`. Team default today: Gemini, model `gemini-2.5-flash` (override with `AGENTDESK_MODEL`). Every part calls the model only through `src/agentdesk/contract/llm.ts`.
+- **LLM:** the first key found, in this order: `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`. Team default today: Gemini, model `gemini-3.8-flash` (override with `AGENTDESK_MODEL`). Every part calls the model only through `src/agentdesk/contract/llm.ts`.
 - **Embeddings:** Voyage (`voyage-3.5`, 1024 dimensions) when `VOYAGE_API_KEY` is set, otherwise Gemini (`gemini-embedding-001`, 768 dimensions, normalised). The choice is **locked at first start** in `settings.embedding`, because vectors from two different models cannot be compared, and the vector indexes are built with those dimensions. Every part embeds only through `src/agentdesk/contract/embed.ts`, never by calling a provider directly.
 - Door writes both helpers first; they live in `contract/` because Loop and the panel use them too.
 
@@ -282,3 +282,4 @@ The Store part owns the panel code (inside the package) and the demo store, whic
 - v3: committee review of v2 (see [REVIEW.md](REVIEW.md)). Learning from failures (section 4b): `priorFailureId`, `reflection.diff`, `failure` knowledge, reflector-proposed rules (`rules.source`, `rules.status`, `evidence`). Success oracle `siteSuccess`; `verified` needs it. Demotion after 2 failed episodes. `mappedRequests[]` sequence for multi-request actions. Active rules are enforced in the tap too, so fallback clicks cannot bypass them. `about` tells agents to call `list_actions` before `do`.
 - v4: Gemini accepted as the LLM (team default `gemini-2.5-flash`); `VOYAGE_API_KEY` optional with Gemini embeddings as fallback, provider locked in `settings.embedding`. Shared `contract/llm.ts` and `contract/embed.ts` are the only way to call a model or embed. Minimum install is two keys.
 - v3.1: `siteSuccess` uses the last attempt per method + path, so a fixed retry counts as success (committee red-team of the Loop oracle). The deterministic Loop core is graded by the frozen oracle in `verify/` (see `verify/README.md`).
+- v4.1: default model is `gemini-3.8-flash`; Google closed `gemini-2.5-flash` to new keys.
