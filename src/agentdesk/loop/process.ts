@@ -21,6 +21,7 @@ import {
   type LoopRequest,
 } from "./core.js";
 import { describeChanges, embedOrEmpty, lessonFromChanges, nameCapability, withTimeout } from "./naming.js";
+import { exploreAfterVisit } from "./explore.js";
 import { sendVisitEvent, type RaindropStatus } from "./raindrop.js";
 
 // The reflector for one episode (docs/parts/loop.md). The pure decisions live in core.ts;
@@ -110,6 +111,7 @@ export async function processEpisode(ctx: AgentDeskContext, episodeId: string): 
 
   // ---- reflection ----
   const failure = classify(episode, sessionRequests, called.length > 0);
+  learned.push(...(await exploreAfterVisit(ctx, episode, failure))); // the desk did not know: read the site (explore.ts)
   const previous = stored.reflection;
   const merged = mergeLearned(previous?.learned ?? [], learned);
   const why =

@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type RequestHandler, type Response } from "express";
 import type { AgentDeskContext } from "../contract/context.js";
+import { EXPLORE_HEADER, EXPLORE_SECRET } from "../contract/site.js";
 import { newId } from "../contract/ids.js";
 import type { RequestDoc, RequestSource, RuleDoc } from "../contract/types.js";
 import { bodyShape, flatQuery, storableBody } from "./redact.js";
@@ -40,6 +41,7 @@ export function createTap(ctx: AgentDeskContext, options: TapOptions): RequestHa
     try {
       path = req.originalUrl.split("?")[0] || "/";
       if (isOwnPath(path, options.ownPaths) || isStaticAsset(path)) return next();
+      if (req.headers[EXPLORE_HEADER] === EXPLORE_SECRET) return next(); // the desk reading its own site
 
       const started = process.hrtime.bigint();
       const sessionId = sessionFromHeaders(req.headers);

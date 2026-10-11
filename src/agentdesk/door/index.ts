@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { AgentDeskContext } from "../contract/context.js";
-import { createAgentRouter } from "./agent-route.js";
+import { rememberHostBaseUrl } from "../contract/site.js";
+import { createAgentRouter, hostBaseUrl } from "./agent-route.js";
 import { createMcpRouter } from "./mcp.js";
 import { SESSION_HEADER } from "./sessions.js";
 import { createTap } from "./tap.js";
@@ -13,6 +14,11 @@ export const DOOR_PATHS = ["/agent", "/mcp", "/.well-known/agentdesk"];
 
 export function createDoorRouter(ctx: AgentDeskContext): Router {
   const router = Router();
+  // The Loop's explorer reads the site from here (it has no request of its own).
+  router.use((req, _res, next) => {
+    rememberHostBaseUrl(ctx, hostBaseUrl(req));
+    next();
+  });
   router.use(createTap(ctx, { ownPaths: [...DOOR_PATHS, ctx.config.panelPath] }));
 
   router.get("/.well-known/agentdesk", (_req, res) => {

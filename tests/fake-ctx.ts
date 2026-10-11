@@ -30,6 +30,8 @@ function applyUpdate(doc: Doc, update: Doc): void {
 export class FakeCollection {
   docs: Doc[] = [];
   async insertOne(d: Doc) { this.docs.push(structuredClone(d)); return { acknowledged: true }; }
+  async insertMany(ds: Doc[]) { for (const d of ds) this.docs.push(structuredClone(d)); return { acknowledged: true }; }
+  async countDocuments(f: Doc = {}) { return this.docs.filter((d) => matches(d, f)).length; }
   async findOne(f: Doc = {}) { return this.docs.find((d) => matches(d, f)) ?? null; }
   async updateOne(f: Doc, u: Doc) {
     const d = this.docs.find((x) => matches(x, f));

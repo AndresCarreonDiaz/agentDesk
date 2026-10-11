@@ -68,3 +68,5 @@ Live: the Loop is wired to real data (CONTRACT sections 3 to 6).
 - Metrics: `loopMetrics` gives the learning curve and failures before the first success (Order step 7).
 - Not built: capability repair from the diff (`inputSchema` or `mappedRequests` edits), the optional `agentdesk({ success })` oracle, the reflector playbook (Order step 9).
 - Known overlap: Door already counts `stats.calls` when `do` runs a capability; the Loop adds one call per processed episode on top, with `successes` judged by `siteSuccess`.
+
+**Explorer (`explore.ts`, built by Door with Ricardo):** after a visit the desk failed (`unknown_site` / `unknown_steps`, or a desk "I don't know yet" turn), the Loop reads the host's own pages (`/llms.txt`, home, sitemap, one page per kind) and learns facts (`knowledge`, source `site_read`) and actions from HTML forms (`capabilities` at `proposed`, `sourceRequestId: "explore:<page>"`, bare `{{field}}` templates, named with `nameCapability`). At most once every 2 minutes per site; the tap does not record these reads. Hook: one line after `classify()` in `process.ts`.
