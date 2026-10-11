@@ -37,6 +37,7 @@ export interface EpisodeDoc extends Base {
   requestIds: string[];
   outcome: Outcome;
   goalSuccess: boolean | null;
+  doneNote: string | null;
   steps: number;
   durationMs: number;
   reflection: {
@@ -99,3 +100,17 @@ export interface FeedbackDoc extends Base {
 export const SESSION_HEADER = 'x-agentdesk-session';
 export const SESSION_COOKIE = 'agentdesk_session';
 export const ID_PREFIX = { session: 'ses_', episode: 'ep_', request: 'req_' } as const;
+
+export interface SettingsDoc {
+  _id: 'settings';
+  siteId: SiteId;
+  adminTokenHash: string;
+  installedAt: Date;
+}
+
+// Section 4: the five fixed agent tools. Capabilities are data, never new tools.
+export const AGENT_TOOLS = ['about', 'ask', 'list_actions', 'do', 'done'] as const;
+export type AgentTool = (typeof AGENT_TOOLS)[number];
+
+// Section 5: an episode with no agent call and no tapped request for this long is abandoned.
+export const ABANDON_AFTER_MS = 60_000;

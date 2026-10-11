@@ -7,11 +7,19 @@ import type {
   KnowledgeDoc,
   RequestDoc,
   RuleDoc,
+  SettingsDoc,
 } from './types';
 
-// Desk memory (CONTRACT.md) lives in its own database on the same Atlas Sandbox cluster.
-// Host-site data (the demo store's catalog, carts, orders) lives in a separate database.
-export const DESK_DB = process.env.MONGODB_DB_DESK ?? 'desk';
+// CONTRACT.md section 1: the desk uses its own database (default `agentdesk`) and never
+// touches the host app's collections. Read lazily so a .env loaded at startup is honored.
+export function agentdeskDbName(): string {
+  return process.env.AGENTDESK_DB || 'agentdesk';
+}
+
+// Section 2: one install is one site; defaults to the database name.
+export function siteIdFromEnv(): string {
+  return process.env.AGENTDESK_SITE_ID || agentdeskDbName();
+}
 
 export const COLLECTIONS = {
   requests: 'requests',
@@ -21,6 +29,7 @@ export const COLLECTIONS = {
   intents: 'intents',
   rules: 'rules',
   feedback: 'feedback',
+  settings: 'settings',
 } as const;
 
 export function deskCollections(db: Db) {
@@ -32,13 +41,14 @@ export function deskCollections(db: Db) {
     intents: db.collection<IntentDoc>(COLLECTIONS.intents),
     rules: db.collection<RuleDoc>(COLLECTIONS.rules),
     feedback: db.collection<FeedbackDoc>(COLLECTIONS.feedback),
+    settings: db.collection<SettingsDoc>(COLLECTIONS.settings),
   };
 }
 
 let shared: Promise<MongoClient> | undefined;
 
-// One client per process: every part shares the same pool to the Atlas Sandbox.
-// Only MONGODB_URI is read, so data cannot silently land outside the sandbox.
+// One client per process, shared by the host app and every part. Only MONGODB_URI is read,
+// so data cannot silently land outside the hackathon Atlas Sandbox.
 export function mongoClient(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI is required (hackathon Atlas Sandbox). Copy .env.example to .env.');
@@ -46,6 +56,6 @@ export function mongoClient(): Promise<MongoClient> {
   return shared;
 }
 
-export async function deskDb(): Promise<Db> {
-  return (await mongoClient()).db(DESK_DB);
+export async function agentdeskDb(): Promise<Db> {
+  return (await mongoClient()).db(agentdeskDbName());
 }
