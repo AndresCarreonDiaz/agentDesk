@@ -51,5 +51,6 @@ See [CONTRACT.md](../CONTRACT.md) sections 1 to 5.
 ## Status
 
 - **Order step 1 built:** `agentdesk()` boot (turns itself off without keys, never breaks the host), shared `contract/` (types, config, db bootstrap with collections, indexes and vector indexes, settings and admin token, `llm.ts`, `embed.ts`, `search.ts` with in-process fallback), the tap (records host traffic, session join, redaction, active rules refused with 403). 14 tests pass; Gemini text, JSON and embeddings checked live.
+- **Order steps 2 and 4 built (PR door/tools):** `POST /agent` with the five tools (plain-language `message` routed by the desk brain, or `{ tool, input }`, or `POST /agent/<tool>`), `POST /agent/done`, episodes created on the first call with the `x-agentdesk-session` header, turns appended, discovery at `/.well-known/agentdesk`, teaching 405 on `GET /agent`. `do` replays `mappedRequests` in order with `{{input.x}}` and `{{steps[0].body.y}}` templates, refuses unapproved writes, blocked capabilities and active rules before sending anything, and teaches missing input with an example. 21 tests pass.
 - Waiting on `MONGODB_URI` for the live Atlas check (`npm run smoke:door`).
-- Next: step 2 (discovery, `about` / `ask`, sessions and episodes, `done`).
+- Next: step 3 (intent match writes `intents`), step 5 (`/mcp`).
