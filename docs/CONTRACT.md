@@ -133,6 +133,8 @@ All documents carry `siteId` (which host platform) and `createdAt`.
   mappedRequests: { method: string; path: string; bodyTemplate: unknown }[];
                                         // in order; most actions have one, a quote form may need 2-3
                                         // a later request may use a value from an earlier response: "{{steps[0].body.quoteId}}"
+                                        // agent input: "{{sku}}" (what buildCapability writes) or "{{input.sku}}"; a whole-string
+                                        // template keeps the input's type (qty stays a number)
   stage: "observed" | "proposed" | "verified" | "approved" | "blocked";
   sourceEpisodeId: string;
   sourceRequestId: string;
@@ -283,3 +285,4 @@ The Store part owns the panel code (inside the package) and the demo store, whic
 - v4: Gemini accepted as the LLM (team default `gemini-2.5-flash`); `VOYAGE_API_KEY` optional with Gemini embeddings as fallback, provider locked in `settings.embedding`. Shared `contract/llm.ts` and `contract/embed.ts` are the only way to call a model or embed. Minimum install is two keys.
 - v3.1: `siteSuccess` uses the last attempt per method + path, so a fixed retry counts as success (committee red-team of the Loop oracle). The deterministic Loop core is graded by the frozen oracle in `verify/` (see `verify/README.md`).
 - v4.1: default model is `gemini-3.8-flash`; Google closed `gemini-2.5-flash` to new keys.
+- v4.2: template syntax for agent input in `mappedRequests`: `"{{sku}}"` or `"{{input.sku}}"` (the Door accepts both; the Loop writes the bare form).
