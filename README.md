@@ -55,6 +55,8 @@ The numbers that prove it: **task success rate, steps per task and seconds per t
 - [docs/CONTRACT.md](docs/CONTRACT.md): shared data shapes and rules that all parts code against
 - [docs/parts/](docs/parts/): one doc per part (store, door, loop)
 - [AGENTS.md](AGENTS.md): start here if you are a coding agent
+- [docs/STORE_PRD.md](docs/STORE_PRD.md): Harbor Goods demo store: why it exists, research cuts, demo contract
+- [docs/STORE_SPEC.md](docs/STORE_SPEC.md): Harbor Goods build spec: Atlas schemas, HTTP, pages, seed
 
 ## Hackathon fit
 

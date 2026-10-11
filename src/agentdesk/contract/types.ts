@@ -1,5 +1,9 @@
 // Mirrors docs/CONTRACT.md section 3. Change both together, in their own commit.
 
+// CONTRACT section 2: the session join between Door calls and fallback clicks.
+export const SESSION_HEADER = "x-agentdesk-session";
+export const SESSION_COOKIE = "agentdesk_session";
+
 export interface Base {
   siteId: string;
   createdAt: Date;

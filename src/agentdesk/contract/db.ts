@@ -206,3 +206,12 @@ export function verifyAdminToken(token: string | undefined | null, settings: Pic
   const b = Buffer.from(settings.adminTokenHash, "hex");
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+/**
+ * A MongoClient on MONGODB_URI that shares AgentDesk's pool, for the host app's own data
+ * (the demo store uses it for its `harbor` database).
+ */
+export async function mongoClient(uri = process.env.MONGODB_URI): Promise<MongoClient> {
+  if (!uri) throw new Error("MONGODB_URI is missing. Add your Atlas connection string to .env.");
+  return (await connect({ mongoUri: uri, dbName: "agentdesk" })).client;
+}

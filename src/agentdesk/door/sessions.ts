@@ -1,11 +1,11 @@
 import type { IncomingHttpHeaders } from "node:http";
 import { randomBytes } from "node:crypto";
 import type { AgentDeskContext } from "../contract/context.js";
+import { SESSION_COOKIE, SESSION_HEADER } from "../contract/types.js";
 
 // CONTRACT section 2: the session join between Door calls and fallback clicks.
 
-export const SESSION_HEADER = "x-agentdesk-session";
-export const SESSION_COOKIE = "agentdesk_session";
+export { SESSION_COOKIE, SESSION_HEADER };
 export const REPLAY_HEADER = "x-agentdesk-replay";
 
 /** Per-process secret the Door sends on capability replays, so the tap can trust source "capability". */
