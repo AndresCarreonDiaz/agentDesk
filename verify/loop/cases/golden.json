@@ -1,0 +1,2744 @@
+[
+ {
+  "name": "close/cart-success",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "$fixture": "episode-cart-fail.json",
+    "pick": "episode"
+   },
+   {
+    "$fixture": "episode-cart-fail.json",
+    "pick": "requests"
+   },
+   []
+  ],
+  "expect": {
+   "partial": {
+    "requestIds": [
+     "req_fixture01",
+     "req_fixture02"
+    ],
+    "siteSuccess": true,
+    "steps": 3,
+    "durationMs": 6000,
+    "outcome": "success",
+    "priorFailureId": null
+   },
+   "ordered": true
+  }
+ },
+ {
+  "name": "close/prior-fail-sitefalse",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "$fixture": "episode-cart-prior-fail.json",
+    "pick": "episode"
+   },
+   {
+    "$fixture": "episode-cart-prior-fail.json",
+    "pick": "requests"
+   },
+   []
+  ],
+  "expect": {
+   "partial": {
+    "siteSuccess": false,
+    "outcome": "error",
+    "requestIds": [
+     "req_fixture00a",
+     "req_fixture00b"
+    ],
+    "steps": 3,
+    "durationMs": 6000
+   },
+   "ordered": true
+  }
+ },
+ {
+  "name": "close/prior-failure-linked",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "$fixture": "episode-cart-fail.json",
+    "pick": "episode"
+   },
+   {
+    "$fixture": "episode-cart-fail.json",
+    "pick": "requests"
+   },
+   [
+    {
+     "$fixture": "episode-cart-prior-fail.json",
+     "pick": "episode"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "priorFailureId": "ep_fixture00"
+   }
+  }
+ },
+ {
+  "name": "close/read-only-null",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "req_a",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/products",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:03Z"
+    },
+    {
+     "requestId": "req_b",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "HEAD",
+     "path": "/products",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:04Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "siteSuccess": null,
+    "outcome": "success",
+    "steps": 2
+   }
+  }
+ },
+ {
+  "name": "close/abandoned",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": null,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "outcome": "abandoned",
+    "siteSuccess": null,
+    "steps": 0,
+    "durationMs": 0,
+    "requestIds": []
+   }
+  }
+ },
+ {
+  "name": "close/goal-true-site-false-is-error",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "r1",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 500,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "outcome": "error",
+    "siteSuccess": false
+   }
+  }
+ },
+ {
+  "name": "close/goal-false-site-true-is-error",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": false,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "r1",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "outcome": "error",
+    "siteSuccess": true
+   }
+  }
+ },
+ {
+  "name": "close/one-failed-write-among-ok-writes",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "r1",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "r2",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "PUT",
+     "path": "/b",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 404,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    },
+    {
+     "requestId": "r3",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "DELETE",
+     "path": "/c",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 204,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:03Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "siteSuccess": false
+   }
+  }
+ },
+ {
+  "name": "close/retry-after-400-is-success",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "r1",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/items",
+     "query": {},
+     "bodyShape": {
+      "qty": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "r2",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/items",
+     "query": {},
+     "bodyShape": {
+      "qty": "number"
+     },
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "siteSuccess": true,
+    "outcome": "success"
+   }
+  }
+ },
+ {
+  "name": "close/retry-order-by-timestamp-not-array",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "r2",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:05Z"
+    },
+    {
+     "requestId": "r1",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "siteSuccess": true
+   }
+  }
+ },
+ {
+  "name": "close/success-then-failure-same-path-is-false",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "r1",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "r2",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 500,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:05Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "siteSuccess": false
+   }
+  }
+ },
+ {
+  "name": "close/failed-read-is-not-site-failure",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "r1",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 500,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "r2",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/b",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "siteSuccess": true
+   }
+  }
+ },
+ {
+  "name": "close/ids-sorted-by-timestamp",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "r_late",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:09Z"
+    },
+    {
+     "requestId": "r_early",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    },
+    {
+     "requestId": "r_mid",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:05Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "requestIds": [
+     "r_early",
+     "r_mid",
+     "r_late"
+    ]
+   },
+   "ordered": true
+  }
+ },
+ {
+  "name": "close/ignores-other-sessions",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "mine",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "theirs",
+     "sessionId": "s2",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/b",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 500,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "requestIds": [
+     "mine"
+    ],
+    "siteSuccess": null,
+    "steps": 1,
+    "durationMs": 0
+   },
+   "ordered": true
+  }
+ },
+ {
+  "name": "close/steps-agent-turns-and-fallback-capability",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [
+     {
+      "role": "agent",
+      "text": "t",
+      "at": "2026-10-11T10:00:01Z"
+     },
+     {
+      "role": "desk",
+      "text": "t",
+      "at": "2026-10-11T10:00:02Z"
+     },
+     {
+      "role": "agent",
+      "text": "t",
+      "at": "2026-10-11T10:00:03Z"
+     }
+    ],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:04Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "capability",
+     "method": "POST",
+     "path": "/b",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:05Z"
+    },
+    {
+     "requestId": "c",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "direct",
+     "method": "GET",
+     "path": "/c",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:06Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "steps": 4,
+    "durationMs": 5000
+   }
+  }
+ },
+ {
+  "name": "close/duration-needs-two-points",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [
+     {
+      "role": "agent",
+      "text": "t",
+      "at": "2026-10-11T10:00:07Z"
+     }
+    ],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "durationMs": 0,
+    "steps": 1
+   }
+  }
+ },
+ {
+  "name": "close/duration-spans-turns-and-requests",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [
+     {
+      "role": "agent",
+      "text": "t",
+      "at": "2026-10-11T10:00:10Z"
+     },
+     {
+      "role": "desk",
+      "text": "t",
+      "at": "2026-10-11T10:00:11Z"
+     }
+    ],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:04Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:20Z"
+    }
+   ],
+   []
+  ],
+  "expect": {
+   "partial": {
+    "durationMs": 16000
+   }
+  }
+ },
+ {
+  "name": "close/prior-none-when-history-empty",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "$fixture": "episode-cart-fail.json",
+    "pick": "episode"
+   },
+   {
+    "$fixture": "episode-cart-fail.json",
+    "pick": "requests"
+   },
+   []
+  ],
+  "expect": {
+   "partial": {
+    "priorFailureId": null
+   }
+  }
+ },
+ {
+  "name": "close/prior-latest-of-several",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e9",
+    "sessionId": "s9",
+    "intents": [
+     "a"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T12:00:00Z"
+   },
+   [],
+   [
+    {
+     "episodeId": "h1",
+     "sessionId": "sa",
+     "intents": [
+      "a"
+     ],
+     "turns": [],
+     "goalSuccess": false,
+     "siteSuccess": null,
+     "createdAt": "2026-10-11T09:00:00Z"
+    },
+    {
+     "episodeId": "h2",
+     "sessionId": "sb",
+     "intents": [
+      "a"
+     ],
+     "turns": [],
+     "goalSuccess": false,
+     "siteSuccess": null,
+     "createdAt": "2026-10-11T11:00:00Z"
+    },
+    {
+     "episodeId": "h3",
+     "sessionId": "sc",
+     "intents": [
+      "a"
+     ],
+     "turns": [],
+     "goalSuccess": true,
+     "siteSuccess": null,
+     "createdAt": "2026-10-11T11:30:00Z"
+    },
+    {
+     "episodeId": "h4",
+     "sessionId": "sd",
+     "intents": [
+      "b"
+     ],
+     "turns": [],
+     "goalSuccess": false,
+     "siteSuccess": null,
+     "createdAt": "2026-10-11T11:45:00Z"
+    },
+    {
+     "episodeId": "h5",
+     "sessionId": "se",
+     "intents": [
+      "a"
+     ],
+     "turns": [],
+     "goalSuccess": false,
+     "siteSuccess": null,
+     "createdAt": "2026-10-11T12:30:00Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "priorFailureId": "h2"
+   }
+  }
+ },
+ {
+  "name": "close/prior-counts-site-failure",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e9",
+    "sessionId": "s9",
+    "intents": [
+     "a",
+     "z"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T12:00:00Z"
+   },
+   [],
+   [
+    {
+     "episodeId": "h1",
+     "sessionId": "sa",
+     "intents": [
+      "z"
+     ],
+     "turns": [],
+     "goalSuccess": true,
+     "siteSuccess": false,
+     "createdAt": "2026-10-11T09:00:00Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "priorFailureId": "h1"
+   }
+  }
+ },
+ {
+  "name": "close/prior-ignores-unknown-and-self-time",
+  "fn": "closeEpisode",
+  "args": [
+   {
+    "episodeId": "e9",
+    "sessionId": "s9",
+    "intents": [
+     "a"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T12:00:00Z"
+   },
+   [],
+   [
+    {
+     "episodeId": "h1",
+     "sessionId": "sa",
+     "intents": [
+      "a"
+     ],
+     "turns": [],
+     "goalSuccess": null,
+     "siteSuccess": null,
+     "createdAt": "2026-10-11T09:00:00Z"
+    },
+    {
+     "episodeId": "h2",
+     "sessionId": "sb",
+     "intents": [
+      "a"
+     ],
+     "turns": [],
+     "goalSuccess": false,
+     "siteSuccess": null,
+     "createdAt": "2026-10-11T12:00:00Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "priorFailureId": null
+   }
+  }
+ },
+ {
+  "name": "build/cart-success",
+  "fn": "buildCapability",
+  "args": [
+   {
+    "$fixture": "episode-cart-fail.json",
+    "pick": "episode"
+   },
+   {
+    "$fixture": "episode-cart-fail.json",
+    "pick": "requests"
+   }
+  ],
+  "expect": {
+   "partial": {
+    "kind": "write",
+    "stage": "observed",
+    "sourceEpisodeId": "ep_fixture01",
+    "sourceRequestId": "req_fixture02",
+    "mappedRequests": [
+     {
+      "method": "POST",
+      "path": "/cart/items",
+      "bodyTemplate": {
+       "sku": "{{sku}}",
+       "qty": "{{qty}}"
+      }
+     }
+    ],
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "sku": {
+       "type": "string"
+      },
+      "qty": {
+       "type": {
+        "$oneOf": [
+         "number",
+         "integer"
+        ]
+       }
+      }
+     },
+     "required": [
+      "sku",
+      "qty"
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "build/prior-fail-null",
+  "fn": "buildCapability",
+  "args": [
+   {
+    "$fixture": "episode-cart-prior-fail.json",
+    "pick": "episode"
+   },
+   {
+    "$fixture": "episode-cart-prior-fail.json",
+    "pick": "requests"
+   }
+  ],
+  "expect": {
+   "isNull": true
+  }
+ },
+ {
+  "name": "build/read-only-null",
+  "fn": "buildCapability",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "req_g1",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "isNull": true
+  }
+ },
+ {
+  "name": "build/only-fallback-source",
+  "fn": "buildCapability",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "req_g2",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "capability",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "string"
+     },
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "req_g3",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "direct",
+     "method": "POST",
+     "path": "/b",
+     "query": {},
+     "bodyShape": {
+      "x": "string"
+     },
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ]
+  ],
+  "expect": {
+   "isNull": true
+  }
+ },
+ {
+  "name": "build/2xx-only-204-ok-3xx-not",
+  "fn": "buildCapability",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "d",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "DELETE",
+     "path": "/a/1",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 204,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "redir",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/b",
+     "query": {},
+     "bodyShape": {
+      "x": "string"
+     },
+     "body": null,
+     "status": 302,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "mappedRequests": [
+     {
+      "method": "DELETE",
+      "path": "/a/1",
+      "bodyTemplate": {}
+     }
+    ],
+    "sourceRequestId": "d"
+   },
+   "ordered": true
+  }
+ },
+ {
+  "name": "build/order-by-timestamp",
+  "fn": "buildCapability",
+  "args": [
+   {
+    "episodeId": "e1",
+    "sessionId": "s1",
+    "intents": [
+     "x"
+    ],
+    "turns": [],
+    "goalSuccess": true,
+    "siteSuccess": null,
+    "createdAt": "2026-10-11T10:00:00Z"
+   },
+   [
+    {
+     "requestId": "r2",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/second",
+     "query": {},
+     "bodyShape": {
+      "b": "number"
+     },
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:09Z"
+    },
+    {
+     "requestId": "r1",
+     "sessionId": "s1",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/first",
+     "query": {},
+     "bodyShape": {
+      "a": "string"
+     },
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:03Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "sourceRequestId": "r1",
+    "mappedRequests": [
+     {
+      "method": "POST",
+      "path": "/first"
+     },
+     {
+      "method": "POST",
+      "path": "/second"
+     }
+    ]
+   },
+   "ordered": true
+  }
+ },
+ {
+  "name": "diff/cart-type-change",
+  "fn": "diffEpisodes",
+  "args": [
+   {
+    "$fixture": "episode-cart-prior-fail.json",
+    "pick": "requests"
+   },
+   {
+    "$fixture": "episode-cart-fail.json",
+    "pick": "requests"
+   }
+  ],
+  "expect": {
+   "partial": {
+    "changes": [
+     {
+      "kind": "type",
+      "method": "POST",
+      "path": "/cart/items",
+      "field": "qty",
+      "failed": "string",
+      "success": "number"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "diff/missing-field",
+  "fn": "diffEpisodes",
+  "args": [
+   [
+    {
+     "requestId": "req_g4",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ],
+   [
+    {
+     "requestId": "req_g5",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "string",
+      "y": "number"
+     },
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "changes": [
+     {
+      "kind": "missing_field",
+      "method": "POST",
+      "path": "/a",
+      "field": "y",
+      "success": "number"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "diff/extra-field",
+  "fn": "diffEpisodes",
+  "args": [
+   [
+    {
+     "requestId": "req_g6",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "string",
+      "z": "boolean"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ],
+   [
+    {
+     "requestId": "req_g7",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "string"
+     },
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "changes": [
+     {
+      "kind": "extra_field",
+      "method": "POST",
+      "path": "/a",
+      "field": "z",
+      "failed": "boolean"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "diff/missing-step",
+  "fn": "diffEpisodes",
+  "args": [
+   [
+    {
+     "requestId": "req_g8",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/b",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ],
+   [
+    {
+     "requestId": "req_g9",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    },
+    {
+     "requestId": "req_g10",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/b",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:03Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "changes": [
+     {
+      "kind": "missing_step",
+      "method": "POST",
+      "path": "/a"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "diff/identical-empty",
+  "fn": "diffEpisodes",
+  "args": [
+   [
+    {
+     "requestId": "req_g11",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ],
+   [
+    {
+     "requestId": "req_g12",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "string"
+     },
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "changes": []
+   }
+  }
+ },
+ {
+  "name": "diff/reads-ignored",
+  "fn": "diffEpisodes",
+  "args": [
+   [
+    {
+     "requestId": "req_g13",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/p",
+     "query": {},
+     "bodyShape": {
+      "q": "string"
+     },
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ],
+   [
+    {
+     "requestId": "req_g14",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/p",
+     "query": {},
+     "bodyShape": {
+      "q": "number"
+     },
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    },
+    {
+     "requestId": "req_g15",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "GET",
+     "path": "/other",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:03Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "changes": []
+   }
+  }
+ },
+ {
+  "name": "diff/failed-write-in-success-not-missing-step",
+  "fn": "diffEpisodes",
+  "args": [
+   [],
+   [
+    {
+     "requestId": "req_g16",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "changes": []
+   }
+  }
+ },
+ {
+  "name": "diff/no-duplicate-changes",
+  "fn": "diffEpisodes",
+  "args": [
+   [
+    {
+     "requestId": "req_g17",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "req_g18",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ],
+   [
+    {
+     "requestId": "req_g19",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {
+      "x": "number"
+     },
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:03Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "changes": [
+     {
+      "kind": "type",
+      "field": "x",
+      "failed": "string",
+      "success": "number"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "diff/different-methods-are-different-steps",
+  "fn": "diffEpisodes",
+  "args": [
+   [
+    {
+     "requestId": "req_g20",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "POST",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ],
+   [
+    {
+     "requestId": "req_g21",
+     "sessionId": "s",
+     "episodeId": null,
+     "source": "fallback",
+     "method": "PUT",
+     "path": "/a",
+     "query": {},
+     "bodyShape": {},
+     "body": null,
+     "status": 200,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:02Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": {
+    "changes": [
+     {
+      "kind": "missing_step",
+      "method": "PUT",
+      "path": "/a"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "stage/proposed-selfreport-not-verified",
+  "fn": "nextStage",
+  "args": [
+   "proposed",
+   [
+    {
+     "goalSuccess": true,
+     "siteSuccess": false
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "stage/proposed-site-null-not-verified",
+  "fn": "nextStage",
+  "args": [
+   "proposed",
+   [
+    {
+     "goalSuccess": true,
+     "siteSuccess": null
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "stage/proposed-goal-null-not-verified",
+  "fn": "nextStage",
+  "args": [
+   "proposed",
+   [
+    {
+     "goalSuccess": null,
+     "siteSuccess": true
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "stage/proposed-both-true-verified",
+  "fn": "nextStage",
+  "args": [
+   "proposed",
+   [
+    {
+     "goalSuccess": true,
+     "siteSuccess": true
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "verified"
+  }
+ },
+ {
+  "name": "stage/proposed-last-outcome-decides-ok",
+  "fn": "nextStage",
+  "args": [
+   "proposed",
+   [
+    {
+     "goalSuccess": false,
+     "siteSuccess": false
+    },
+    {
+     "goalSuccess": true,
+     "siteSuccess": true
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "verified"
+  }
+ },
+ {
+  "name": "stage/proposed-last-outcome-decides-bad",
+  "fn": "nextStage",
+  "args": [
+   "proposed",
+   [
+    {
+     "goalSuccess": true,
+     "siteSuccess": true
+    },
+    {
+     "goalSuccess": true,
+     "siteSuccess": false
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "stage/proposed-no-outcomes",
+  "fn": "nextStage",
+  "args": [
+   "proposed",
+   []
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "stage/verified-two-fails-demoted",
+  "fn": "nextStage",
+  "args": [
+   "verified",
+   [
+    {
+     "goalSuccess": false,
+     "siteSuccess": null
+    },
+    {
+     "goalSuccess": true,
+     "siteSuccess": false
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "stage/verified-fail-fail-demoted",
+  "fn": "nextStage",
+  "args": [
+   "verified",
+   [
+    {
+     "goalSuccess": false,
+     "siteSuccess": false
+    },
+    {
+     "goalSuccess": false,
+     "siteSuccess": false
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "stage/verified-only-last-two-count",
+  "fn": "nextStage",
+  "args": [
+   "verified",
+   [
+    {
+     "goalSuccess": false,
+     "siteSuccess": false
+    },
+    {
+     "goalSuccess": true,
+     "siteSuccess": true
+    },
+    {
+     "goalSuccess": false,
+     "siteSuccess": false
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "verified"
+  }
+ },
+ {
+  "name": "stage/verified-older-ok-last-two-bad",
+  "fn": "nextStage",
+  "args": [
+   "verified",
+   [
+    {
+     "goalSuccess": true,
+     "siteSuccess": true
+    },
+    {
+     "goalSuccess": false,
+     "siteSuccess": true
+    },
+    {
+     "goalSuccess": true,
+     "siteSuccess": false
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "stage/verified-single-fail-stays",
+  "fn": "nextStage",
+  "args": [
+   "verified",
+   [
+    {
+     "goalSuccess": false,
+     "siteSuccess": false
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "verified"
+  }
+ },
+ {
+  "name": "stage/verified-null-is-not-fail",
+  "fn": "nextStage",
+  "args": [
+   "verified",
+   [
+    {
+     "goalSuccess": null,
+     "siteSuccess": null
+    },
+    {
+     "goalSuccess": null,
+     "siteSuccess": null
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "verified"
+  }
+ },
+ {
+  "name": "stage/verified-no-outcomes",
+  "fn": "nextStage",
+  "args": [
+   "verified",
+   []
+  ],
+  "expect": {
+   "equals": "verified"
+  }
+ },
+ {
+  "name": "stage/approved-never-changes",
+  "fn": "nextStage",
+  "args": [
+   "approved",
+   [
+    {
+     "goalSuccess": false,
+     "siteSuccess": false
+    },
+    {
+     "goalSuccess": false,
+     "siteSuccess": false
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "approved"
+  }
+ },
+ {
+  "name": "stage/approved-ok-never-changes",
+  "fn": "nextStage",
+  "args": [
+   "approved",
+   [
+    {
+     "goalSuccess": true,
+     "siteSuccess": true
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "approved"
+  }
+ },
+ {
+  "name": "stage/blocked-never-changes",
+  "fn": "nextStage",
+  "args": [
+   "blocked",
+   [
+    {
+     "goalSuccess": true,
+     "siteSuccess": true
+    },
+    {
+     "goalSuccess": true,
+     "siteSuccess": true
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "blocked"
+  }
+ },
+ {
+  "name": "stage/observed-to-proposed",
+  "fn": "nextStage",
+  "args": [
+   "observed",
+   []
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "stage/observed-with-outcomes-still-proposed",
+  "fn": "nextStage",
+  "args": [
+   "observed",
+   [
+    {
+     "goalSuccess": true,
+     "siteSuccess": true
+    }
+   ]
+  ],
+  "expect": {
+   "equals": "proposed"
+  }
+ },
+ {
+  "name": "rules/two-episodes-one-draft",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    },
+    {
+     "episodeId": "e2",
+     "sessionId": "s_e2"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s_e2",
+     "episodeId": "e2",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "partial": [
+    {
+     "source": "reflector",
+     "status": "proposed",
+     "enabled": false,
+     "compiled": {
+      "action": "require_review",
+      "match": {
+       "method": "POST",
+       "path": "/cart/discount"
+      }
+     },
+     "evidence": [
+      "e1",
+      "e2"
+     ],
+     "text": {
+      "$nonEmptyString": true
+     }
+    }
+   ],
+   "ordered": true,
+   "also": {
+    "length": 1
+   }
+  }
+ },
+ {
+  "name": "rules/one-episode-nothing",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "length": 0
+  }
+ },
+ {
+  "name": "rules/same-episode-twice-nothing",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 422,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "length": 0
+  }
+ },
+ {
+  "name": "rules/three-episodes-evidence-distinct",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    },
+    {
+     "episodeId": "e2",
+     "sessionId": "s_e2"
+    },
+    {
+     "episodeId": "e3",
+     "sessionId": "s_e3"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "c",
+     "sessionId": "s_e2",
+     "episodeId": "e2",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 500,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "d",
+     "sessionId": "s_e3",
+     "episodeId": "e3",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 403,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "length": 1,
+   "also": {
+    "partial": [
+     {
+      "evidence": [
+       "e1",
+       "e2",
+       "e3"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "rules/reads-are-not-writes",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    },
+    {
+     "episodeId": "e2",
+     "sessionId": "s_e2"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "GET",
+     "path": "/p",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 404,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s_e2",
+     "episodeId": "e2",
+     "source": "fallback",
+     "method": "GET",
+     "path": "/p",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 404,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "length": 0
+  }
+ },
+ {
+  "name": "rules/successful-writes-ignored",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    },
+    {
+     "episodeId": "e2",
+     "sessionId": "s_e2"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s_e2",
+     "episodeId": "e2",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 201,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "length": 0
+  }
+ },
+ {
+  "name": "rules/status-399-not-failed",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    },
+    {
+     "episodeId": "e2",
+     "sessionId": "s_e2"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 302,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s_e2",
+     "episodeId": "e2",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/cart/discount",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 302,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "length": 0
+  }
+ },
+ {
+  "name": "rules/different-paths-do-not-pool",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    },
+    {
+     "episodeId": "e2",
+     "sessionId": "s_e2"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/x",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s_e2",
+     "episodeId": "e2",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/y",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "length": 0
+  }
+ },
+ {
+  "name": "rules/different-methods-do-not-pool",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    },
+    {
+     "episodeId": "e2",
+     "sessionId": "s_e2"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/x",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s_e2",
+     "episodeId": "e2",
+     "source": "fallback",
+     "method": "PUT",
+     "path": "/x",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "length": 0
+  }
+ },
+ {
+  "name": "rules/two-groups-two-drafts",
+  "fn": "proposeRules",
+  "args": [
+   [
+    {
+     "episodeId": "e1",
+     "sessionId": "s_e1"
+    },
+    {
+     "episodeId": "e2",
+     "sessionId": "s_e2"
+    }
+   ],
+   [
+    {
+     "requestId": "a",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/x",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "b",
+     "sessionId": "s_e2",
+     "episodeId": "e2",
+     "source": "fallback",
+     "method": "POST",
+     "path": "/x",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 400,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "c",
+     "sessionId": "s_e1",
+     "episodeId": "e1",
+     "source": "fallback",
+     "method": "DELETE",
+     "path": "/y",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 403,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    },
+    {
+     "requestId": "d",
+     "sessionId": "s_e2",
+     "episodeId": "e2",
+     "source": "fallback",
+     "method": "DELETE",
+     "path": "/y",
+     "query": {},
+     "bodyShape": {
+      "code": "string"
+     },
+     "body": null,
+     "status": 500,
+     "durationMs": 10,
+     "timestamp": "2026-10-11T10:00:01Z"
+    }
+   ]
+  ],
+  "expect": {
+   "length": 2,
+   "also": {
+    "contains": [
+     {
+      "compiled": {
+       "match": {
+        "method": "POST",
+        "path": "/x"
+       }
+      }
+     },
+     {
+      "compiled": {
+       "match": {
+        "method": "DELETE",
+        "path": "/y"
+       }
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "rules/empty-input",
+  "fn": "proposeRules",
+  "args": [
+   [],
+   []
+  ],
+  "expect": {
+   "length": 0
+  }
+ }
+]

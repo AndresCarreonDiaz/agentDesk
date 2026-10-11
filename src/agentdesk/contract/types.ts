@@ -1,13 +1,15 @@
-// Mirrors docs/CONTRACT.md v4, section 3. Change only with the team, in its own commit.
+// Mirrors docs/CONTRACT.md section 3. Change both together, in their own commit.
 
-export type SiteId = string;
+// CONTRACT section 2: the session join between Door calls and fallback clicks.
+export const SESSION_HEADER = "x-agentdesk-session";
+export const SESSION_COOKIE = "agentdesk_session";
 
-interface Base {
-  siteId: SiteId;
+export interface Base {
+  siteId: string;
   createdAt: Date;
 }
 
-export type RequestSource = 'fallback' | 'capability' | 'direct';
+export type RequestSource = "fallback" | "capability" | "direct";
 
 export interface RequestDoc extends Base {
   requestId: string;
@@ -24,42 +26,64 @@ export interface RequestDoc extends Base {
   timestamp: Date;
 }
 
-export type Outcome = 'open' | 'success' | 'abandoned' | 'error' | 'blocked';
-export type FailureKind = 'unknown_site' | 'unknown_steps' | 'capability_failed' | 'wrong_answer' | 'blocked';
+export type Outcome = "open" | "success" | "abandoned" | "error" | "blocked";
+
+export type FailureKind =
+  | "unknown_site"
+  | "unknown_steps"
+  | "capability_failed"
+  | "wrong_answer"
+  | "blocked";
+
+export interface Turn {
+  role: "agent" | "desk";
+  text: string;
+  capability?: string;
+  at: Date;
+}
+
+export interface Reflection {
+  failure: FailureKind | null;
+  why: string;
+  diff: string | null;
+  learned: { kind: "knowledge" | "capability" | "rule"; id: string }[];
+}
 
 export interface EpisodeDoc extends Base {
   episodeId: string;
   sessionId: string;
-  agentFamily: string;
+  agentFamily: string; // "dots" | "muse" | "claude" | "script:<name>" ...
   goal: string | null;
   intents: string[];
-  turns: { role: 'agent' | 'desk'; text: string; capability?: string; at: Date }[];
+  turns: Turn[];
   requestIds: string[];
   outcome: Outcome;
   goalSuccess: boolean | null; // the agent's word: a hypothesis
-  doneNote: string | null; // checked by Loop against the tapped requests
-  siteSuccess: boolean | null; // the site's evidence, set by Loop at close (section 4)
+  doneNote: string | null;
+  siteSuccess: boolean | null; // the site's evidence, set by Loop at close
   steps: number;
   durationMs: number;
-  priorFailureId: string | null; // last failed episode with the same intent
-  reflection: {
-    failure: FailureKind | null;
-    why: string;
-    diff: string | null; // what the success did that the prior failure did not (section 4b)
-    learned: { kind: 'knowledge' | 'capability' | 'rule'; id: string }[];
-  } | null;
+  priorFailureId: string | null;
+  reflection: Reflection | null;
 }
 
-export type CapabilityStage = 'observed' | 'proposed' | 'verified' | 'approved' | 'blocked';
+export type CapabilityKind = "read" | "write";
+
+export type CapabilityStage = "observed" | "proposed" | "verified" | "approved" | "blocked";
+
+export interface MappedRequest {
+  method: string;
+  path: string;
+  bodyTemplate: unknown; // may reference earlier steps: "{{steps[0].body.quoteId}}"
+}
 
 export interface CapabilityDoc extends Base {
   capabilityId: string;
   name: string;
   description: string;
-  kind: 'read' | 'write';
-  inputSchema: object;
-  // In order. A later step may use an earlier response: "{{steps[0].body.quoteId}}".
-  mappedRequests: { method: string; path: string; bodyTemplate: unknown }[];
+  kind: CapabilityKind;
+  inputSchema: object; // JSON Schema
+  mappedRequests: MappedRequest[];
   stage: CapabilityStage;
   sourceEpisodeId: string;
   sourceRequestId: string;
@@ -70,10 +94,12 @@ export interface CapabilityDoc extends Base {
   updatedAt: Date;
 }
 
+export type KnowledgeSource = "site_read" | "episode" | "failure" | "developer";
+
 export interface KnowledgeDoc extends Base {
   knowledgeId: string;
   text: string;
-  source: 'site_read' | 'episode' | 'failure' | 'developer'; // failure = lesson from a failed episode
+  source: KnowledgeSource;
   sourceRef: string | null;
   intent: string | null;
   confidence: number;
@@ -87,43 +113,50 @@ export interface IntentDoc extends Base {
   capabilityIds: string[];
 }
 
+export interface RuleMatch {
+  method?: string;
+  path?: string;
+  bodyField?: string;
+}
+
 export interface RuleDoc extends Base {
   ruleId: string;
   text: string;
   compiled: {
-    action: 'block' | 'require_review';
+    action: "block" | "require_review";
     capabilities?: string[];
-    match?: { method?: string; path?: string; bodyField?: string };
+    match?: RuleMatch;
   };
-  source: 'developer' | 'reflector'; // reflector = proposed from failures by Loop
-  status: 'proposed' | 'active' | 'rejected';
-  evidence: string[]; // episodeIds behind a reflector proposal
-  enabled: boolean; // true only when status is "active"; Door enforces in `do` and in the tap
+  source: "developer" | "reflector";
+  status: "proposed" | "active" | "rejected";
+  evidence: string[];
+  enabled: boolean; // true only when status is "active"
 }
 
 export interface FeedbackDoc extends Base {
   feedbackId: string;
-  type: 'correction' | 'approve' | 'block';
+  type: "correction" | "approve" | "block";
   target: { collection: string; id: string };
   text: string | null;
 }
 
-// Section 2: the session join.
-export const SESSION_HEADER = 'x-agentdesk-session';
-export const SESSION_COOKIE = 'agentdesk_session';
-export const ID_PREFIX = { session: 'ses_', episode: 'ep_', request: 'req_' } as const;
-
-export interface SettingsDoc {
-  _id: 'settings';
-  siteId: SiteId;
-  adminTokenHash: string;
-  installedAt: Date;
-  embedding: { provider: 'voyage' | 'gemini'; model: string; dims: number }; // locked at first start
+export interface EmbeddingSettings {
+  provider: "voyage" | "gemini";
+  model: string;
+  dims: number;
 }
 
-// Section 4: the five fixed agent tools. Capabilities are data, never new tools.
-export const AGENT_TOOLS = ['about', 'ask', 'list_actions', 'do', 'done'] as const;
-export type AgentTool = (typeof AGENT_TOOLS)[number];
+export interface SettingsDoc {
+  _id: "settings";
+  siteId: string;
+  adminTokenHash: string;
+  installedAt: Date;
+  embedding: EmbeddingSettings; // locked at first start
+  createdAt: Date;
+}
 
-// Section 5: an episode with no agent call and no tapped request for this long is abandoned.
-export const ABANDON_AFTER_MS = 60_000;
+// What the Door offers to agents (CONTRACT section 4).
+export function isOffered(cap: Pick<CapabilityDoc, "kind" | "stage">): boolean {
+  if (cap.kind === "write") return cap.stage === "approved";
+  return cap.stage === "proposed" || cap.stage === "verified" || cap.stage === "approved";
+}

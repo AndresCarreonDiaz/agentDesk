@@ -42,9 +42,16 @@ See [CONTRACT.md](../CONTRACT.md) sections 1 to 5.
 
 ## Run and test
 
-- Run: _fill in_
-- Test: _fill in_
+- Install: `npm install`, then copy `.env.example` to `.env` (set your own `AGENTDESK_DB`).
+- Test (no database): `npm test`
+- Check the model and embeddings with your keys: `npm run smoke:llm`
+- Check the tap end to end against Atlas: `npm run smoke:door`
+- Use it in a host: `import { agentdesk } from "./src/agentdesk/index.js"` then `app.use(agentdesk())` **before** your own routes and body parser.
 
 ## Status
 
-Not started.
+- **Order step 1 built:** `agentdesk()` boot (turns itself off without keys, never breaks the host), shared `contract/` (types, config, db bootstrap with collections, indexes and vector indexes, settings and admin token, `llm.ts`, `embed.ts`, `search.ts` with in-process fallback), the tap (records host traffic, session join, redaction, active rules refused with 403). 14 tests pass; Gemini text, JSON and embeddings checked live.
+- **Order steps 2 and 4 built (PR door/tools):** `POST /agent` with the five tools (plain-language `message` routed by the desk brain, or `{ tool, input }`, or `POST /agent/<tool>`), `POST /agent/done`, episodes created on the first call with the `x-agentdesk-session` header, turns appended, discovery at `/.well-known/agentdesk`, teaching 405 on `GET /agent`. `do` replays `mappedRequests` in order with `{{input.x}}` and `{{steps[0].body.y}}` templates, refuses unapproved writes, blocked capabilities and active rules before sending anything, and teaches missing input with an example. 21 tests pass.
+- Waiting on `MONGODB_URI` for the live Atlas check (`npm run smoke:door`).
+- **Order step 5 built:** `/mcp` serves the same five tools over MCP (Streamable HTTP, JSON responses, stateless). On `initialize` it hands out an AgentDesk `ses_` id as `Mcp-Session-Id`, so MCP calls, the episode and the tap share one session, and restarts lose nothing. The client's own name (for example `claude-code`) becomes `agentFamily`. Connect any MCP client to `<site>/mcp`. 23 tests pass, including a real MCP client.
+- Next: step 3 (intent match writes `intents`).

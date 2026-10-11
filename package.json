@@ -1,9 +1,8 @@
 {
-  "name": "agentdesk",
-  "version": "0.1.0",
+  "name": "agentdesk-hackathon",
   "private": true,
-  "description": "AgentDesk: a front desk for AI agents that learns from every visit. Includes the Harbor Goods demo store.",
   "type": "module",
+  "description": "AgentDesk: drop it in, it knows nothing, every agent that visits teaches it.",
   "engines": {
     "node": ">=20.19.0"
   },
@@ -12,18 +11,26 @@
     "dev:local": "tsx src/store/dev-local.ts",
     "start": "tsx src/store/index.ts",
     "seed": "tsx src/store/seed.ts",
-    "test": "tsx --test \"src/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "test": "vitest run && tsx --test \"src/**/*.test.ts\"",
+    "test:door": "vitest run",
+    "test:store": "tsx --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "smoke:llm": "tsx --env-file=.env scripts/smoke-llm.ts",
+    "smoke:door": "tsx --env-file=.env scripts/smoke-door.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.28.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "express": "^5.3.0",
     "mongodb": "^7.7.0",
+    "zod": "^4.6.6",
     "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/node": "^26.6.5",
-    "mongodb-memory-server": "^11.3.0",
-    "typescript": "^7.0.2"
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7",
+    "mongodb-memory-server": "^11.3.0"
   }
 }
