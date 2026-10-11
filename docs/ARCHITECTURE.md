@@ -83,3 +83,5 @@ Every episode emits hard signals to **Raindrop**: success or abandon, steps, sec
 ## Stack
 
 TypeScript and Node for the middleware, desk brain and visitor agents. Playwright for the visitor agents' fallback browsing. A small demo store as the host platform, plus a second host (a quote form) to show the same package learning a different site from zero.
+
+Demo store contract: [STORE_PRD.md](./STORE_PRD.md) and [STORE_SPEC.md](./STORE_SPEC.md). Commerce data lives in Atlas database `harbor`; desk memory stays in `desk`.

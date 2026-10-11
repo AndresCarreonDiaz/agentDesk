@@ -29,6 +29,8 @@ The numbers that prove it: **task success rate, steps per task and seconds per t
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): components, data model, memory, sponsor tools
 - [docs/DEMO.md](docs/DEMO.md): the 3 minute stage demo and the 1 minute video
 - [docs/PLAN.md](docs/PLAN.md): today's build plan, cut lines and fallbacks
+- [docs/STORE_PRD.md](docs/STORE_PRD.md): Harbor Goods demo store — why it exists, research cuts, demo contract
+- [docs/STORE_SPEC.md](docs/STORE_SPEC.md): Harbor Goods build spec — Atlas schemas, HTTP, pages, seed
 
 ## Hackathon fit
 

@@ -1,0 +1,440 @@
+# Spec: Harbor Goods demo store
+
+Companion to [STORE_PRD.md](./STORE_PRD.md). This is the build contract: stack, Atlas schema, HTTP, pages, seed, env, acceptance.
+
+---
+
+## 1. System context
+
+```
+browser / Playwright / visiting agent
+        |
+        |  HTML + /api + aliased /cart/items
+        v
++-------------------- Harbor Goods (this spec) ------------------+
+|  session cookie harbor_sid                                     |
+|  SSR pages    JSON API    sitemap / llms.txt                   |
+|                         |                                      |
+|                         v                                      |
+|                   MongoDB Atlas                                |
+|                   db: harbor                                   |
+|                   products, inventory, carts, coupons, orders  |
++----------------------------^-----------------------------------+
+                             | same HTTP, same cookie
++-------------------- AgentDesk middleware ----------------------+
+|  tap -> db desk.requests   door -> /agent /mcp /.well-known    |
++----------------------------------------------------------------+
+```
+
+Two databases on the **same Atlas cluster**:
+
+| Database | Owner | Collections |
+|---|---|---|
+| `harbor` | this store | `products`, `inventory`, `carts`, `coupons`, `orders` |
+| `desk` | AgentDesk | `episodes`, `requests`, `knowledge`, `capabilities`, `intents`, `rules`, `feedback` |
+
+Do not write desk documents from store code. Do not read `harbor` from the desk brain except via tapped HTTP and public HTML.
+
+---
+
+## 2. Stack
+
+| Layer | Choice | Why |
+|---|---|---|
+| Runtime | Node 20+, TypeScript | Repo + Modelence |
+| HTTP | Express | Simple SSR + JSON, easy middleware tap |
+| HTML | Server-rendered templates (e.g. `lit-html`/Handlebars or TS template strings) | Crawler/Playwright reliable |
+| Driver | official `mongodb` | No ORM lock-in for a 5-collection app |
+| DB | Atlas sandbox, `MONGODB_URI` | Hackathon rule |
+| Deploy | `PORT`, `npx modelence deploy` later | PLAN.md |
+
+Suggested layout (when we scaffold):
+
+```
+apps/store/
+  src/index.ts           # listen on PORT
+  src/db.ts              # client, db harbor
+  src/session.ts         # harbor_sid
+  src/routes/pages.ts
+  src/routes/api.ts
+  src/seed.ts
+  public/
+package.json             # workspace or this folder
+```
+
+If the team prefers Next.js App Router, keep **route paths, JSON bodies, and Atlas schemas identical**.
+
+---
+
+## 3. Configuration
+
+```bash
+MONGODB_URI=mongodb+srv://...        # required; hackathon Atlas Sandbox cluster only
+MONGODB_DB_STORE=harbor              # default harbor
+PORT=3000
+SITE_URL=http://localhost:3000
+```
+
+Read **only** `MONGODB_URI` and exit with an error if it is missing. Do **not** fall back to Modelence's `MONGO_URL`: that would quietly move the data off the hackathon sandbox, which breaks the finalist rule. On Modelence, set `MONGODB_URI` explicitly to the sandbox URI. Listen on `process.env.PORT || 3000`.
+
+`.env` is gitignored. Commit `apps/store/.env.example` with placeholder values only.
+
+---
+
+## 4. Session
+
+- Cookie name: `harbor_sid`
+- Value: 24-byte hex (or UUID)
+- `httpOnly`, `sameSite=Lax`, `path=/`, 7-day max-age
+- Created on first request if missing
+- Cart `_id` **is** this session id (one active cart per browser)
+- JSON APIs must still work if the client sends `x-session-id` (Playwright/agents)
+
+Tap should log `sessionId` from cookie or header.
+
+---
+
+## 5. Atlas data model (`harbor`)
+
+### 5.1 Indexes
+
+```
+products:   { slug: 1 } unique
+            { "variants.sku": 1 } unique
+            { tags: 1 }
+inventory:  { _id: 1 }          # sku
+carts:      { status: 1, updatedAt: 1 }
+coupons:    { code: 1 } unique
+orders:     { sessionId: 1, createdAt: -1 }
+```
+
+### 5.2 `products`
+
+One document per sellable product. Variants bounded (≤ 4). Stock is **not** the source of truth here; `inventory` is.
+
+```json
+{
+  "_id": "prod_harbor_mug",
+  "slug": "harbor-mug",
+  "name": "Harbor Mug",
+  "description": "12oz ceramic mug. The blue one is the house favorite.",
+  "category": "mugs",
+  "tags": ["mug", "ceramic", "desk"],
+  "images": [{ "url": "/img/mug-blue.svg", "alt": "Harbor Mug in blue" }],
+  "variants": [
+    {
+      "sku": "MUG-BLUE",
+      "color": "blue",
+      "label": "Blue",
+      "priceCents": 2400
+    },
+    {
+      "sku": "MUG-WHITE",
+      "color": "white",
+      "label": "White",
+      "priceCents": 2400
+    },
+    {
+      "sku": "MUG-CLAY",
+      "color": "clay",
+      "label": "Clay",
+      "priceCents": 2400
+    }
+  ],
+  "active": true,
+  "createdAt": "ISODate"
+}
+```
+
+### 5.3 `inventory`
+
+```json
+{
+  "_id": "MUG-BLUE",
+  "productId": "prod_harbor_mug",
+  "available": 100,
+  "reserved": 0,
+  "sold": 0
+}
+```
+
+Add-to-cart (simplified reservation, enough for demo):
+
+```js
+inventory.updateOne(
+  { _id: sku, available: { $gte: qty } },
+  { $inc: { available: -qty, reserved: qty } }
+)
+```
+
+If `matchedCount === 0` → `409` `{ error: "out_of_stock", sku }`.
+
+Checkout: `$inc: { reserved: -qty, sold: qty }`.  
+Qty down / remove from cart: reverse the reservation.
+
+Hackathon skip: no background expiry job. Stock starts at 100.
+
+### 5.4 `carts`
+
+```json
+{
+  "_id": "<harbor_sid>",
+  "status": "active",
+  "items": [
+    {
+      "sku": "MUG-BLUE",
+      "productId": "prod_harbor_mug",
+      "name": "Harbor Mug",
+      "variantLabel": "Blue",
+      "imageUrl": "/img/mug-blue.svg",
+      "qty": 1,
+      "unitPriceCents": 2400
+    }
+  ],
+  "couponCode": null,
+  "summary": {
+    "subtotalCents": 2400,
+    "discountCents": 0,
+    "shippingCents": 0,
+    "totalCents": 2400,
+    "currency": "USD"
+  },
+  "createdAt": "ISODate",
+  "updatedAt": "ISODate"
+}
+```
+
+`status`: `active` | `converted`.  
+Recompute `summary` on every cart mutation. Shipping `$0` for demo.  
+Coupon: if `couponCode` set, `discountCents = floor(subtotal * percentOff / 100)`.
+
+### 5.5 `coupons`
+
+```json
+{
+  "_id": "WELCOME10",
+  "code": "WELCOME10",
+  "percentOff": 10,
+  "active": true,
+  "description": "10% off subtotal"
+}
+```
+
+Unknown or inactive code → `400` `{ error: "invalid_coupon" }`.
+
+### 5.6 `orders` (immutable after insert)
+
+```json
+{
+  "_id": "ord_...",
+  "sessionId": "<harbor_sid>",
+  "status": "paid",
+  "items": [ { "sku": "MUG-BLUE", "name": "Harbor Mug", "variantLabel": "Blue", "qty": 1, "unitPriceCents": 2400 } ],
+  "summary": { "subtotalCents": 2400, "discountCents": 240, "shippingCents": 0, "totalCents": 2160, "currency": "USD" },
+  "couponCode": "WELCOME10",
+  "shipping": {
+    "name": "Alex Rivera",
+    "email": "alex@example.com",
+    "line1": "100 Congress Ave",
+    "city": "Austin",
+    "region": "TX",
+    "postal": "78701",
+    "country": "US"
+  },
+  "payment": { "method": "demo", "last4": "4242", "transactionId": "demo_..." },
+  "createdAt": "ISODate"
+}
+```
+
+No updates except optional `status` (keep `paid` for demo). Snapshot names and prices from the cart, never from live `products`.
+
+---
+
+## 6. HTTP API
+
+Base: same origin. JSON `Content-Type: application/json`.  
+**Alias:** `POST /cart/items` = `POST /api/cart/items` (DEMO.md).
+
+All mutating cart/checkout routes require a session (cookie or `x-session-id`).
+
+### 6.1 `GET /health`
+
+`200` `{ "ok": true, "mongo": true }`
+
+### 6.2 `GET /api/products`
+
+Query: `q` optional (regex on `name`, `tags`, `variants.color`, case-insensitive).  
+`200` `{ "products": [ { id, slug, name, description, images, variants: [{ sku, color, label, priceCents, available }] } ] }`
+
+Join `available` from `inventory` by sku when returning.
+
+### 6.3 `GET /api/products/:slug`
+
+`404` if missing. Same product object as above, single.
+
+### 6.4 `GET /api/cart`
+
+`200` cart document for this session (create empty `active` cart if none).
+
+### 6.5 `POST /api/cart/items`  and  `POST /cart/items`
+
+Body:
+
+```json
+{ "sku": "MUG-BLUE", "qty": 1 }
+```
+
+Rules:
+
+- `sku` required string, `qty` integer ≥ 1 (default 1)
+- Resolve variant from `products`
+- Reserve inventory
+- Upsert line: if sku already in cart, add qty
+- Recalc summary
+
+`200` `{ "cart": { ... } }`  
+`404` unknown sku  
+`409` out of stock  
+`400` bad qty
+
+### 6.6 `PATCH /api/cart/items/:sku`
+
+`{ "qty": 2 }`  — `qty: 0` removes. Adjust inventory reservation by delta.
+
+### 6.7 `DELETE /api/cart/items/:sku`
+
+Same as qty 0.
+
+### 6.8 `POST /api/cart/coupon`
+
+```json
+{ "code": "WELCOME10" }
+```
+
+Set `couponCode`, recalc. `DELETE /api/cart/coupon` clears it.
+
+### 6.9 `POST /api/checkout`
+
+```json
+{
+  "shipping": {
+    "name": "Alex Rivera",
+    "email": "alex@example.com",
+    "line1": "100 Congress Ave",
+    "city": "Austin",
+    "region": "TX",
+    "postal": "78701",
+    "country": "US"
+  },
+  "payment": { "method": "demo", "last4": "4242" }
+}
+```
+
+Rules:
+
+- Cart `active` with ≥ 1 item
+- `shipping.name`, `email`, `line1`, `city`, `country` required
+- `payment.method` must be `"demo"`
+- Insert order snapshot, inventory reserved → sold, cart `converted`
+- New empty cart may be created on next GET
+
+`201` `{ "order": { "id", "summary", "items", "shipping" } }`  
+`400` empty cart or missing shipping  
+`409` stock changed
+
+Fake card fields on the HTML form are not validated beyond non-empty; API ignores PAN.
+
+---
+
+## 7. HTML pages (SSR)
+
+Every page: header with store name + cart count, footer with policies link.
+
+| Route | Renders |
+|---|---|
+| `GET /` | Featured: Harbor Mug, Canvas Tote, Softcover Notebook |
+| `GET /products` | Grid; honor `?q=` |
+| `GET /products/:slug` | Name, description, color buttons, price, stock, form POST `/cart/items` with hidden `sku` + `qty` |
+| `GET /cart` | Lines, qty forms, coupon form POST `/api/cart/coupon`, link to checkout |
+| `GET /checkout` | Shipping fields (city default empty so demo can type Austin), submit POST `/api/checkout` |
+| `GET /orders/:id` | Confirmation; 404 if not this session |
+| `GET /policies` | Plain language: US shipping, fake payments, coupons for humans, returns 30 days |
+| `GET /sitemap.xml` | `/`, `/products`, each product slug, `/policies` |
+| `GET /llms.txt` | Store name, URL, what it sells, sitemap link. **No** `/agent` tool list (desk injects that). |
+
+Forms: `application/x-www-form-urlencoded` accepted on cart/checkout controllers **in addition to JSON**, then redirect (`303`) to `/cart` or `/orders/:id`. Tap still sees method, path, body.
+
+Product page for the mug **must** include the literal words `blue mug` in visible HTML (name + description) so visit-1 knowledge extraction is easy.
+
+---
+
+## 8. Seed catalog
+
+Idempotent upsert by `_id` / sku. Run `npm run seed`.
+
+| productId | slug | name | skus |
+|---|---|---|---|
+| `prod_harbor_mug` | `harbor-mug` | Harbor Mug | `MUG-BLUE` 2400, `MUG-WHITE` 2400, `MUG-CLAY` 2400 |
+| `prod_canvas_tote` | `canvas-tote` | Canvas Tote | `TOTE-NAT` 3200 |
+| `prod_notebook` | `softcover-notebook` | Softcover Notebook | `NOTE-DOT` 1400 |
+| `prod_sticker` | `laptop-stickers` | Laptop Sticker Pack | `STK-PACK` 800 |
+| `prod_coaster` | `cork-coaster` | Cork Coaster | `CST-CORK` 900 |
+| `prod_pen` | `gel-pen` | Gel Pen | `PEN-BLK` 600 |
+
+All `available: 100`.  
+Coupon `WELCOME10` 10% off.
+
+SVG placeholders in `public/img/` named by sku color.
+
+---
+
+## 9. AgentDesk integration contract
+
+Store app exports or wraps the Express `app` so middleware can:
+
+1. Run first: assign session.
+2. Tap: after response, write `{ method, path, bodyShape, status, sessionId, ts }` to **desk** `requests` (implemented by AgentDesk track, not this spec).
+3. Mount desk door routes without colliding with `/api`, `/cart/items`, `/products`.
+
+Reserved by the desk (store must not use): `/agent`, `/mcp`, `/.well-known/agentdesk`.
+
+Store **should** add in HTML `<head>`:
+
+```html
+<link rel="alternate" type="text/plain" href="/llms.txt" />
+```
+
+Desk may add the agentdesk link tag itself.
+
+---
+
+## 10. Money and errors
+
+- All money: integer cents. Display with `Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })`.
+- Error JSON: `{ "error": "<code>", "message": "<human>" }`
+- Codes: `bad_request`, `not_found`, `out_of_stock`, `invalid_coupon`, `empty_cart`, `invalid_shipping`
+
+---
+
+## 11. Test / acceptance (store alone)
+
+Automated or manual:
+
+1. Seed on empty `harbor` db → 6 products, 8 inventory docs (3 mug colors + 5 others), 1 coupon.
+2. `GET /products/harbor-mug` HTML contains `MUG-BLUE` or visible “Blue”.
+3. `POST /cart/items` `{ "sku": "MUG-BLUE", "qty": 1 }` → cart total 2400; inventory available 99, reserved 1.
+4. `POST /api/cart/coupon` `{ "code": "WELCOME10" }` → discount 240, total 2160.
+5. `POST /api/checkout` with Austin shipping → `orders` count +1, cart `converted`, inventory sold 1 reserved 0.
+6. Second checkout with empty cart → 400.
+7. Unknown sku → 404.
+8. `/sitemap.xml` lists `/products/harbor-mug`.
+
+When AgentDesk tap exists: the add-to-cart call appears in `desk.requests` with `sessionId` equal to `harbor_sid`.
+
+---
+
+## 12. Non-functional
+
+- p95 page load does not matter beyond “feels instant” on localhost.
+- No auth. Do not expose Atlas URI.
+- Logs: method, path, status, sessionId — no payment PAN (store never accepts a real PAN field into Atlas).
