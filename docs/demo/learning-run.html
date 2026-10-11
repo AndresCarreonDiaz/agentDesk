@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentDesk Learning Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F3EE; --paper:#FBFAF7; --ink:#17191D; --ink2:#555B64; --ink3:#9AA0A7; --line:#DEDCD4; --zone:#ECEAE3;
+  --blue:#2756E8; --blue-soft:rgba(39,86,232,.12); --green:#178F5F; --red:#D2353A;
+  --serif:"Instrument Serif",Georgia,serif; --sans:"Hanken Grotesk",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);overflow:hidden}
+body{font-family:var(--sans);color:var(--ink)}
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:0 0;
+  background:radial-gradient(1200px 600px at 50% 0%,#fff 0%,transparent 70%),var(--bg)}
+/* header */
+.hdr{position:absolute;left:64px;right:64px;top:34px;height:120px}
+.title{font-family:var(--serif);font-size:62px;line-height:1;letter-spacing:-.01em}
+.title i{color:var(--blue)}
+.goalbadge{margin-top:14px;display:inline-flex;align-items:center;gap:12px;font-size:22px;font-weight:500;color:var(--ink2);
+  padding:8px 16px 8px 10px;border:1px solid var(--line);border-radius:999px;background:var(--paper)}
+.goalbadge b{font-weight:700;color:var(--ink)}
+.goalbadge .tag{font-size:13px;letter-spacing:.14em;font-weight:700;color:#fff;background:var(--ink);padding:4px 9px;border-radius:999px}
+.topcount{position:absolute;right:0;top:4px;text-align:right}
+.topcount .lbl{font-size:15px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--ink3)}
+.topcount .nums{font-family:var(--serif);font-size:72px;line-height:1.05;display:flex;gap:18px;justify-content:flex-end;align-items:baseline}
+.topcount .n{min-width:44px;text-align:center;color:var(--ink3);opacity:.18;transition:color .5s,transform .5s}
+.topcount .n.on{opacity:1;color:var(--ink);transform:translateY(-2px)}
+.topcount .n.on.last{color:var(--blue)}
+.topcount .arr{color:var(--ink3);font-size:46px}
+.controls{position:absolute;right:0;top:104px;display:flex;gap:8px}
+.controls button{font:600 15px var(--sans);color:var(--ink2);background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:7px 16px;cursor:pointer}
+.controls button.sel,.controls button:hover{color:var(--ink);border-color:var(--ink3)}
+.controls button.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* lanes */
+.lane{position:absolute;left:64px;width:1792px;height:255px;transition:opacity .6s}
+.lane.dim{opacity:.28}
+.lane::after{content:"";position:absolute;left:0;right:0;bottom:-6px;height:1px;background:var(--line)}
+.lane:last-of-type::after{display:none}
+.lanehead{position:absolute;left:0;top:2px;font-size:20px;font-weight:600;color:var(--ink2)}
+.lanehead b{font-family:var(--serif);font-weight:400;font-size:34px;color:var(--ink);margin-right:6px}
+.lane svg{position:absolute;left:0;top:0;overflow:visible}
+.node{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;flex-direction:column}
+.agent{width:84px;height:84px;border-radius:50%;background:var(--paper);border:1.5px solid var(--ink3);font-weight:700;font-size:15px;letter-spacing:.12em;color:var(--ink2)}
+.desk{width:250px;height:70px;border-radius:14px;background:var(--paper);border:1.5px solid var(--blue);box-shadow:0 6px 24px -10px rgba(39,86,232,.35)}
+.desk .dn{font-weight:700;font-size:15px;letter-spacing:.2em;color:var(--blue)}
+.desk .ds{font-family:var(--mono);font-size:14px;color:var(--ink2);margin-top:3px;white-space:nowrap;transition:color .3s}
+.desk.ping{animation:ping .9s ease-out}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(39,86,232,.45)}100%{box-shadow:0 0 0 22px rgba(39,86,232,0)}}
+.goal{width:170px;height:84px;border-radius:16px;background:var(--paper);border:1.5px solid var(--line);font-size:17px;font-weight:600;color:var(--ink2);gap:2px;transition:all .45s}
+.goal svg{position:static}
+.goal.done{border-color:var(--green);color:var(--green);background:#EFF8F3;transform:translate(-50%,-50%) scale(1.04)}
+.goal .ck{position:absolute;top:-12px;right:-12px;width:30px;height:30px;border-radius:50%;background:var(--green);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;transform:scale(0);transition:transform .4s cubic-bezier(.3,1.6,.5,1)}
+.goal.done .ck{transform:scale(1)}
+.zonelbl{position:absolute;font-size:13px;letter-spacing:.2em;font-weight:700;color:var(--ink3)}
+.untouched{position:absolute;font-family:var(--mono);font-size:16px;color:var(--ink3);opacity:0;transition:opacity .6s}
+.untouched.on{opacity:1}
+/* pills */
+.pill{position:absolute;transform:translate(-50%,0) scale(.6);opacity:0;display:flex;align-items:center;gap:8px;white-space:nowrap;
+  font-family:var(--mono);font-size:16px;font-weight:500;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:4px 6px 4px 10px;
+  transition:opacity .3s,transform .4s cubic-bezier(.3,1.5,.5,1)}
+.pill.on{opacity:1;transform:translate(-50%,0) scale(1)}
+.pill .m{font-weight:700;color:var(--ink)}
+.pill .p{color:var(--ink2)}
+.pill .s{font-weight:700;color:#fff;border-radius:5px;padding:1px 7px;background:var(--green)}
+.pill.err .s{background:var(--red)}
+.pill.err{border-color:var(--red)}
+.pill.err.on{animation:shake .5s .1s, redflash 1.6s .1s}
+@keyframes shake{20%,60%{margin-left:-6px}40%,80%{margin-left:6px}}
+@keyframes redflash{0%{box-shadow:0 0 0 0 rgba(210,53,58,.55);background:#FDECEC}100%{box-shadow:0 0 0 18px rgba(210,53,58,0);background:var(--paper)}}
+.pill .note{font-family:var(--sans);font-size:14px;color:var(--red);font-weight:600;margin-left:2px}
+/* card */
+.card,.flyer{position:absolute;border-radius:12px;background:var(--blue);color:#fff;padding:9px 14px;white-space:nowrap;
+  box-shadow:0 0 0 4px var(--blue-soft),0 10px 30px -8px rgba(39,86,232,.65)}
+.card .cn,.flyer .cn{font-family:var(--mono);font-weight:700;font-size:19px}
+.card .cl{font-size:14px;opacity:.85;margin-top:2px}
+.card{opacity:0;transform:scale(.4);transition:opacity .25s,transform .55s cubic-bezier(.3,1.7,.45,1)}
+.card.on{opacity:1;transform:scale(1)}
+.card .mint{position:absolute;top:-11px;left:12px;font-size:11px;letter-spacing:.16em;font-weight:700;background:var(--ink);color:#fff;border-radius:999px;padding:2px 8px}
+.flyer{display:none;z-index:5;transform-origin:center}
+.flyer .cn{font-size:16px}
+/* counters */
+.panel{position:absolute;left:1500px;top:20px;width:292px;height:215px;border-left:1px solid var(--line);padding-left:36px}
+.panel .k{font-size:13px;letter-spacing:.16em;font-weight:700;color:var(--ink3);text-transform:uppercase}
+.panel .big{font-family:var(--serif);font-size:118px;line-height:.95;margin:4px 0 6px}
+.panel .big.blue{color:var(--blue)}
+.panel .row{display:flex;gap:28px;font-size:18px;color:var(--ink2)}
+.panel .row b{font-family:var(--mono);color:var(--ink);font-size:20px}
+/* summary */
+.summary{position:absolute;left:0;right:0;top:974px;text-align:center;font-family:var(--serif);font-size:54px;line-height:1;opacity:0;transform:translateY(16px);transition:all .9s cubic-bezier(.2,.8,.2,1)}
+.summary.on{opacity:1;transform:none}
+.summary .b{color:var(--blue)}
+.summary i{color:var(--ink2)}
+.footer{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-size:15px;color:var(--ink3);letter-spacing:.04em}
+.hint{position:absolute;left:64px;bottom:16px;font-size:13px;color:var(--ink3)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="hdr">
+    <div class="title">AgentDesk <i>Learning Run</i></div>
+    <div class="goalbadge"><span class="tag">GOAL</span><b>“Add a blue mug to my cart”</b> · same Gemini agent, three visits</div>
+    <div class="topcount">
+      <div class="lbl">website requests</div>
+      <div class="nums"><span class="n" id="tc0">4</span><span class="arr">→</span><span class="n" id="tc1">1</span><span class="arr">→</span><span class="n last" id="tc2">0</span></div>
+    </div>
+    <div class="controls">
+      <button id="play">Replay</button>
+      <button id="s1" class="sel">1×</button>
+      <button id="s2">2×</button>
+    </div>
+  </div>
+  <div id="lanes"></div>
+  <div class="summary" id="summary"><span class="b">4 → 1 → 0</span> website requests. <i>Nobody wrote an agent API.</i></div>
+  <div class="hint">space: play / pause</div>
+  <div class="footer">Real Gemini runs · MongoDB Atlas memory · built today at the MongoDB hackathon</div>
+  <div class="flyer" id="flyer"></div>
+</div>
+
+<script>
+(() => {
+const LANE_TOP=[170,432,694], AG=[110,124], DK=[740,52], GL=[1330,124], GOAL_IN=1245;
+const MUG='<svg width="30" height="26" viewBox="0 0 30 26" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v12a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M20 9h3a3 3 0 0 1 0 6h-3"/></svg>';
+const CARD_POS=[878,18];
+
+const lanes=[
+ {head:'<b>Visit 1</b>· learning the site', start:600, goal:8600, secs:17.7, big:'',
+  segs:[
+   {d:`M${AG[0]},${AG[1]} C330,124 520,56 ${DK[0]},${DK[1]}`, s:600, dur:1200, k:'g'},
+   {d:`M${DK[0]},${DK[1]} C600,80 430,120 380,172`, s:2600, dur:900, k:'g'},
+   {d:'M380,172 Q490,130 600,172', s:3800, dur:800, k:'g'},
+   {d:'M600,172 Q710,130 820,172', s:5400, dur:800, k:'g'},
+   {d:'M820,172 Q930,130 1040,172', s:6500, dur:800, k:'g'},
+   {d:`M1040,172 C1140,172 1170,124 ${GOAL_IN},124`, s:7600, dur:1000, k:'g'},
+  ],
+  hops:[
+   {x:380,y:172,row:0,at:3500,m:'GET',p:'/api/products?q=blue+mug',st:'200'},
+   {x:600,y:172,row:1,at:4600,m:'POST',p:'/api/cart/items',st:'400',err:'missing sku'},
+   {x:820,y:172,row:0,at:6200,m:'GET',p:'/api/products/MUG-BLUE',st:'200'},
+   {x:1040,y:172,row:1,at:7300,m:'POST',p:'/api/cart/items {sku, qty}',st:'201',key:true},
+  ],
+  tools:[1800,3500,4600,6200,7300,8600],
+  status:[[0,'No actions learned yet'],[10200,'1 action learned']],
+  pings:[1800,10200],
+  card:{at:10200,mint:true}, watch:true},
+ {head:'<b>Visit 2</b>· guided by the desk', start:11000, goal:16000, secs:13.0,
+  segs:[
+   {d:`M${AG[0]},${AG[1]} C330,124 520,56 ${DK[0]},${DK[1]}`, s:11400, dur:1000, k:'g'},
+   {d:`M${DK[0]},${DK[1]} C690,120 600,172 520,172`, s:13400, dur:700, k:'g'},
+   {d:`M520,172 C600,172 690,120 ${DK[0]},${DK[1]}`, s:14300, dur:600, k:'g'},
+   {d:`M${DK[0]},${DK[1]} C960,52 1100,124 ${GOAL_IN},124`, s:15000, dur:1000, k:'b'},
+  ],
+  rail:{d:`M${DK[0]},${DK[1]} C960,52 1100,124 ${GOAL_IN},124`, s:12400, dur:800},
+  hops:[{x:520,y:172,row:0,at:14100,m:'GET',p:'/api/products?q=blue+mug',st:'200'}],
+  tools:[12400,14100,16000],
+  status:[[0,'No actions learned yet'],[10200,'1 action learned'],[12400,'offers add_item_to_cart'],[14900,'runs add_item_to_cart → 201']],
+  pings:[12400,14900],
+  card:{at:11900, from:0, fly:[11000,11900]}},
+ {head:'<b>Visit 3</b>· one action', start:16500, goal:18500, secs:19.0,
+  segs:[{d:`M${AG[0]+42},${AG[1]} L${GOAL_IN},124`, s:17300, dur:1200, k:'b', arrow:true}],
+  hops:[],
+  tools:[17700,18500],
+  status:[[0,'No actions learned yet'],[10200,'1 action learned'],[17700,'do add_item_to_cart → 201']],
+  pings:[17700],
+  card:{at:17300, from:1, fly:[16500,17300]}, untouched:18500},
+];
+const TOP_AT=[8600,16000,18500], SUMMARY_AT=19400, END=21000;
+const LIFT=[8900,10200];
+
+// ---- build DOM
+const host=document.getElementById('lanes'); const NS='http://www.w3.org/2000/svg';
+lanes.forEach((L,i)=>{
+  const el=document.createElement('section'); el.className='lane'; el.style.top=LANE_TOP[i]+'px';
+  let svg=`<svg width="1480" height="255">
+    <defs><filter id="glow${i}" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="5"/></filter></defs>
+    <rect x="200" y="146" width="1090" height="110" rx="14" fill="var(--zone)"/>
+    <path d="M${AG[0]+42},124 L${GL[0]-85},124" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="2 8" fill="none"/>`;
+  if(L.watch) L.hops.forEach((h,j)=>{ svg+=`<line class="watch" data-j="${j}" x1="${DK[0]}" y1="${DK[1]+35}" x2="${h.x}" y2="${h.y}" stroke="var(--blue)" stroke-width="1.5" stroke-dasharray="3 6" opacity="0" style="transition:opacity .5s"/>`; });
+  if(L.rail) svg+=`<path class="rail" d="${L.rail.d}" stroke="var(--blue)" stroke-width="16" stroke-linecap="round" fill="none" opacity=".22" filter="url(#glow${i})"/>
+     <path class="rail2" d="${L.rail.d}" stroke="var(--blue)" stroke-width="2" stroke-dasharray="1 7" stroke-linecap="round" fill="none"/>`;
+  L.segs.forEach(s=>{
+    if(s.k==='b') svg+=`<path class="seg glowseg" d="${s.d}" stroke="var(--blue)" stroke-width="14" stroke-linecap="round" fill="none" opacity=".25" filter="url(#glow${i})"/>`;
+    svg+=`<path class="seg" d="${s.d}" stroke="${s.k==='b'?'var(--blue)':'var(--ink2)'}" stroke-width="${s.k==='b'?5:3}" stroke-linecap="round" fill="none"/>`;
+  });
+  if(L.segs.some(s=>s.arrow)) svg+=`<path class="arrowhead" d="M${GOAL_IN-18},112 L${GOAL_IN+2},124 L${GOAL_IN-18},136 z" fill="var(--blue)" opacity="0" style="transition:opacity .3s"/>`;
+  L.hops.forEach((h,j)=>svg+=`<circle class="hopdot" data-j="${j}" cx="${h.x}" cy="${h.y}" r="7" fill="${h.err?'var(--red)':'var(--green)'}" opacity="0"/>`);
+  svg+=`<g class="token"><circle r="20" fill="var(--ink)" opacity=".1"/><circle r="11" fill="var(--ink)" stroke="#fff" stroke-width="3"/></g></svg>`;
+  let html=svg+`<div class="lanehead">${L.head}</div>
+   <div class="zonelbl" style="left:218px;top:156px">WEBSITE</div>
+   <div class="node agent" style="left:${AG[0]}px;top:${AG[1]}px">AGENT</div>
+   <div class="node desk" style="left:${DK[0]}px;top:${DK[1]}px"><div class="dn">DESK</div><div class="ds"></div></div>
+   <div class="node goal" style="left:${GL[0]}px;top:${GL[1]}px">${MUG}<span>mug in cart</span><span class="ck">✓</span></div>`;
+  L.hops.forEach((h,j)=>html+=`<div class="pill${h.err?' err':''}" data-j="${j}" style="left:${h.x}px;top:${h.row?220:186}px"><span class="m">${h.m}</span><span class="p">${h.p}</span><span class="s">${h.st}</span>${h.err?`<span class="note">${h.err}</span>`:''}</div>`);
+  html+=`<div class="card" style="left:${CARD_POS[0]}px;top:${CARD_POS[1]}px">${L.card.mint?'<span class="mint">LEARNED</span>':''}<div class="cn">add_item_to_cart</div><div class="cl">lesson: include sku (string)</div></div>`;
+  if(L.untouched) html+=`<div class="untouched" style="left:640px;top:190px">0 requests · website untouched</div>`;
+  html+=`<div class="panel"><div class="k">website requests</div><div class="big${i===2?' blue':''}">0</div>
+    <div class="row"><span>tool calls <b class="tc">0</b></span><span><b class="sc">0.0</b> s</span></div></div>`;
+  el.innerHTML=html; host.appendChild(el);
+  L.el=el; L.token=el.querySelector('.token'); L.tokenDots=L.token.querySelectorAll('circle');
+  L.segEls=[...el.querySelectorAll('path.seg')]; L.desk=el.querySelector('.desk'); L.ds=el.querySelector('.ds');
+  L.big=el.querySelector('.big'); L.tc=el.querySelector('.tc'); L.sc=el.querySelector('.sc');
+  L.goalEl=el.querySelector('.goal'); L.cardEl=el.querySelector('.card');
+  L.pills=[...el.querySelectorAll('.pill')]; L.dots=[...el.querySelectorAll('.hopdot')]; L.watches=[...el.querySelectorAll('.watch')];
+  L.railEl=el.querySelector('.rail'); L.rail2=el.querySelector('.rail2'); L.arrow=el.querySelector('.arrowhead');
+  L.unt=el.querySelector('.untouched');
+  // map segments: each non-glow seg el with optional glow sibling
+  const all=[...el.querySelectorAll('path.seg')]; L.trails=[]; let gi=0;
+  L.segs.forEach(s=>{ const t={glow:null}; if(s.k==='b'){t.glow=all[gi++];} t.path=all[gi++]; t.len=t.path.getTotalLength(); s.t=t;
+    [t.path,t.glow].forEach(p=>p&&(p.style.strokeDasharray=t.len, p.style.strokeDashoffset=t.len)); });
+  if(L.railEl){L.railLen=L.railEl.getTotalLength();L.railEl.style.strokeDasharray=L.railLen;}
+});
+
+// ---- timing helpers
+const clamp=v=>Math.max(0,Math.min(1,v));
+const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const prog=(t,s,d)=>ease(clamp((t-s)/d));
+const flyer=document.getElementById('flyer');
+const stageXY=(i,x,y)=>[64+x,LANE_TOP[i]+y];
+
+function render(t){
+  lanes.forEach((L,i)=>{
+    L.el.classList.toggle('dim',t<L.start);
+    // trails + token
+    let cur=null,curP=0;
+    L.segs.forEach(s=>{ const p=prog(t,s.s,s.dur); const off=s.t.len*(1-p);
+      s.t.path.style.strokeDashoffset=off; if(s.t.glow)s.t.glow.style.strokeDashoffset=off;
+      if(t>=s.s){cur=s;curP=p;} });
+    if(cur){ const pt=cur.t.path.getPointAtLength(cur.t.len*curP); L.token.setAttribute('transform',`translate(${pt.x},${pt.y})`); L.token.style.opacity=1;
+      const c=cur.k==='b'?'var(--blue)':'var(--ink)'; L.tokenDots.forEach(d=>d.setAttribute('fill',c)); }
+    else L.token.style.opacity=0;
+    if(L.arrow) L.arrow.setAttribute('opacity', t>=L.segs[0].s+L.segs[0].dur?1:0);
+    if(L.railEl){const p=prog(t,L.rail.s,L.rail.dur); L.railEl.style.strokeDashoffset=L.railLen*(1-p); L.rail2.style.opacity=p;}
+    // hops
+    L.hops.forEach((h,j)=>{const on=t>=h.at; L.pills[j].classList.toggle('on',on); L.dots[j].setAttribute('opacity',on?1:0);
+      if(L.watches[j]) L.watches[j].setAttribute('opacity',on?.55:0);
+      if(h.key) L.pills[j].style.opacity=(t>=LIFT[0])?.25:'';});
+    const req=L.hops.filter(h=>t>=h.at).length;
+    L.big.textContent=req;
+    L.tc.textContent=L.tools.filter(x=>t>=x).length;
+    const s0=L.segs[0].s; L.sc.textContent=(clamp((t-s0)/(L.goal-s0))*L.secs).toFixed(1);
+    let st=''; L.status.forEach(([a,s])=>{if(t>=a)st=s;}); L.ds.textContent=st;
+    L.ds.style.color=st.startsWith('No')?'var(--ink3)':'var(--blue)';
+    L.goalEl.classList.toggle('done',t>=L.goal);
+    L.cardEl.classList.toggle('on',t>=L.card.at);
+    if(L.unt) L.unt.classList.toggle('on',t>=L.untouched);
+    if(L.watches.length) L.watches.forEach(w=>{ if(t>=LIFT[1]) w.setAttribute('opacity',0); });
+  });
+  // flyer: lift the 201 out of lane 1 into the desk card, then carry the card to each next lane
+  let fly=null;
+  const key=lanes[0].hops[3];
+  if(t>=LIFT[0]&&t<LIFT[1]){ fly={from:stageXY(0,key.x-150,key.row?220:186), to:stageXY(0,...CARD_POS), p:prog(t,LIFT[0],LIFT[1]-LIFT[0]), txt:'POST /api/cart/items 201', grow:true}; }
+  lanes.forEach((L,i)=>{ if(L.card.fly&&t>=L.card.fly[0]&&t<L.card.fly[1]) fly={from:stageXY(L.card.from,...CARD_POS),to:stageXY(i,...CARD_POS),p:prog(t,...[L.card.fly[0],L.card.fly[1]-L.card.fly[0]]),txt:'add_item_to_cart'}; });
+  if(fly){ const {from,to,p}=fly; const x=from[0]+(to[0]-from[0])*p, y=from[1]+(to[1]-from[1])*p-Math.sin(p*Math.PI)*(fly.grow?120:40);
+    flyer.style.display='block'; flyer.style.left=x+'px'; flyer.style.top=y+'px';
+    flyer.innerHTML=`<div class="cn">${fly.grow&&p>.55?'add_item_to_cart':fly.txt}</div>`;
+    flyer.style.transform=`scale(${1+Math.sin(p*Math.PI)*.12})`; }
+  else flyer.style.display='none';
+  TOP_AT.forEach((a,i)=>document.getElementById('tc'+i).classList.toggle('on',t>=a));
+  document.getElementById('summary').classList.toggle('on',t>=SUMMARY_AT);
+}
+
+// desk pings (one-shot animation when crossing a time)
+function pings(prev,t){ lanes.forEach(L=>L.pings.forEach(a=>{ if(prev<a&&t>=a){L.desk.classList.remove('ping');void L.desk.offsetWidth;L.desk.classList.add('ping');} })); }
+
+// ---- clock
+let t=0,speed=1,playing=false,last=0;
+function frame(now){ if(!playing)return; const dt=Math.min(64,now-last); last=now; const prev=t; t=Math.min(END,t+dt*speed); pings(prev,t); render(t);
+  if(t>=END){playing=false;btn.textContent='Replay';return;} requestAnimationFrame(frame); }
+function play(){ if(t>=END) { t=0; render(0); } playing=true; btn.textContent='Pause'; last=performance.now(); requestAnimationFrame(frame); }
+function toggle(){ if(playing){playing=false;btn.textContent='Play';} else play(); }
+const btn=document.getElementById('play');
+btn.onclick=()=>{ t=END; playing=false; play(); };
+const setSpeed=v=>{speed=v;document.getElementById('s1').classList.toggle('sel',v===1);document.getElementById('s2').classList.toggle('sel',v===2);};
+document.getElementById('s1').onclick=()=>setSpeed(1); document.getElementById('s2').onclick=()=>setSpeed(2);
+addEventListener('keydown',e=>{ if(e.code==='Space'){e.preventDefault(); if(t>=END){t=END;play();} else toggle();} });
+
+// ---- fit 1920x1080 into the viewport
+function fit(){ const s=Math.min(innerWidth/1920,innerHeight/1080); const st=document.getElementById('stage');
+  st.style.transform=`scale(${s}) translate(-50%,-50%)`; st.style.transformOrigin='0 0'; st.style.left='50%'; st.style.top='50%';
+  st.style.transform=`translate(-50%,-50%) scale(${s})`; st.style.transformOrigin='center center'; }
+addEventListener('resize',fit); fit();
+
+const qt=new URLSearchParams(location.search).get('t');
+if(qt!==null){ t=+qt; render(t); btn.textContent='Play'; }
+else if(matchMedia('(prefers-reduced-motion: reduce)').matches){ t=END; render(END); btn.textContent='Replay'; }
+else { render(0); btn.textContent='Pause'; setTimeout(play,500); }
+})();
+</script>
+</body>
+</html>
