@@ -1,0 +1,28 @@
+{
+  "name": "harbor-goods",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Harbor Goods: the demo store AgentDesk learns from. All data in MongoDB Atlas.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "seed": "tsx src/seed.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "mongodb": "^7.7.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "mongodb-memory-server": "^11.3.0",
+    "typescript": "^7.0.2"
+  }
+}

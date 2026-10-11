@@ -87,7 +87,7 @@ Read **only** `MONGODB_URI` and exit with an error if it is missing. Do **not** 
 - Value: 24-byte hex (or UUID)
 - `httpOnly`, `sameSite=Lax`, `path=/`, 7-day max-age
 - Created on first request if missing
-- Cart `_id` **is** this session id (one active cart per browser)
+- One **active** cart per session (`carts.sessionId`, unique partial index on `status: "active"`). The cart has its own `_id`, so after checkout the converted cart stays as history and the same browser gets a fresh cart
 - JSON APIs must still work if the client sends `x-session-id` (Playwright/agents)
 
 Tap should log `sessionId` from cookie or header.
@@ -103,7 +103,8 @@ products:   { slug: 1 } unique
             { "variants.sku": 1 } unique
             { tags: 1 }
 inventory:  { _id: 1 }          # sku
-carts:      { status: 1, updatedAt: 1 }
+carts:      { sessionId: 1 } unique, partial { status: "active" }
+            { status: 1, updatedAt: 1 }
 coupons:    { code: 1 } unique
 orders:     { sessionId: 1, createdAt: -1 }
 ```
@@ -178,7 +179,8 @@ Hackathon skip: no background expiry job. Stock starts at 100.
 
 ```json
 {
-  "_id": "<harbor_sid>",
+  "_id": "cart_...",
+  "sessionId": "<harbor_sid>",
   "status": "active",
   "items": [
     {
@@ -191,7 +193,7 @@ Hackathon skip: no background expiry job. Stock starts at 100.
       "unitPriceCents": 2400
     }
   ],
-  "couponCode": null,
+  "coupon": null,
   "summary": {
     "subtotalCents": 2400,
     "discountCents": 0,
@@ -206,7 +208,7 @@ Hackathon skip: no background expiry job. Stock starts at 100.
 
 `status`: `active` | `converted`.  
 Recompute `summary` on every cart mutation. Shipping `$0` for demo.  
-Coupon: if `couponCode` set, `discountCents = floor(subtotal * percentOff / 100)`.
+Coupon: `coupon` holds `{ code, percentOff }` snapshotted when applied; `discountCents = floor(subtotal * percentOff / 100)`.
 
 ### 5.5 `coupons`
 
@@ -361,6 +363,8 @@ Every page: header with store name + cart count, footer with policies link.
 | `GET /policies` | Plain language: US shipping, fake payments, coupons for humans, returns 30 days |
 | `GET /sitemap.xml` | `/`, `/products`, each product slug, `/policies` |
 | `GET /llms.txt` | Store name, URL, what it sells, sitemap link. **No** `/agent` tool list (desk injects that). |
+
+HTML forms can only POST, so a hidden `_method=PATCH|DELETE` field routes them to the PATCH/DELETE handlers.
 
 Forms: `application/x-www-form-urlencoded` accepted on cart/checkout controllers **in addition to JSON**, then redirect (`303`) to `/cart` or `/orders/:id`. Tap still sees method, path, body.
 
