@@ -1,4 +1,4 @@
-// Mirrors docs/CONTRACT.md section 3. Change only with the team, in its own commit.
+// Mirrors docs/CONTRACT.md v4, section 3. Change only with the team, in its own commit.
 
 export type SiteId = string;
 
@@ -36,14 +36,17 @@ export interface EpisodeDoc extends Base {
   turns: { role: 'agent' | 'desk'; text: string; capability?: string; at: Date }[];
   requestIds: string[];
   outcome: Outcome;
-  goalSuccess: boolean | null;
-  doneNote: string | null;
+  goalSuccess: boolean | null; // the agent's word: a hypothesis
+  doneNote: string | null; // checked by Loop against the tapped requests
+  siteSuccess: boolean | null; // the site's evidence, set by Loop at close (section 4)
   steps: number;
   durationMs: number;
+  priorFailureId: string | null; // last failed episode with the same intent
   reflection: {
     failure: FailureKind | null;
     why: string;
-    learned: { kind: 'knowledge' | 'capability'; id: string }[];
+    diff: string | null; // what the success did that the prior failure did not (section 4b)
+    learned: { kind: 'knowledge' | 'capability' | 'rule'; id: string }[];
   } | null;
 }
 
@@ -55,7 +58,8 @@ export interface CapabilityDoc extends Base {
   description: string;
   kind: 'read' | 'write';
   inputSchema: object;
-  mappedRequest: { method: string; path: string; bodyTemplate: unknown };
+  // In order. A later step may use an earlier response: "{{steps[0].body.quoteId}}".
+  mappedRequests: { method: string; path: string; bodyTemplate: unknown }[];
   stage: CapabilityStage;
   sourceEpisodeId: string;
   sourceRequestId: string;
@@ -69,8 +73,9 @@ export interface CapabilityDoc extends Base {
 export interface KnowledgeDoc extends Base {
   knowledgeId: string;
   text: string;
-  source: 'site_read' | 'episode' | 'developer';
+  source: 'site_read' | 'episode' | 'failure' | 'developer'; // failure = lesson from a failed episode
   sourceRef: string | null;
+  intent: string | null;
   confidence: number;
   embedding: number[];
 }
@@ -85,8 +90,15 @@ export interface IntentDoc extends Base {
 export interface RuleDoc extends Base {
   ruleId: string;
   text: string;
-  compiled: { action: 'block' | 'require_review'; capabilities?: string[]; match?: string };
-  enabled: boolean;
+  compiled: {
+    action: 'block' | 'require_review';
+    capabilities?: string[];
+    match?: { method?: string; path?: string; bodyField?: string };
+  };
+  source: 'developer' | 'reflector'; // reflector = proposed from failures by Loop
+  status: 'proposed' | 'active' | 'rejected';
+  evidence: string[]; // episodeIds behind a reflector proposal
+  enabled: boolean; // true only when status is "active"; Door enforces in `do` and in the tap
 }
 
 export interface FeedbackDoc extends Base {
@@ -106,6 +118,7 @@ export interface SettingsDoc {
   siteId: SiteId;
   adminTokenHash: string;
   installedAt: Date;
+  embedding: { provider: 'voyage' | 'gemini'; model: string; dims: number }; // locked at first start
 }
 
 // Section 4: the five fixed agent tools. Capabilities are data, never new tools.
