@@ -42,3 +42,14 @@ Built on MongoDB Atlas (Atlas Agent Engine memory and governance, Vector Search 
 ## Status
 
 Concept stage. Code lands here during the event.
+
+## Contributing: secret gate
+
+This repo is public. Before your first commit, enable the pre-commit secret scan:
+
+```bash
+brew install gitleaks
+./scripts/setup-hooks.sh
+```
+
+The hook blocks `.env` files, private keys, and other credential files, and runs `gitleaks` on staged changes. CI runs the same scan on every push and pull request.
