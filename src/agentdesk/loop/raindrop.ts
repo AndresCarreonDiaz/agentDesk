@@ -20,6 +20,8 @@ export interface VisitEvent {
   durationMs: number;
   capabilities: string[];
   failureKind: string | null;
+  siteRequests: number;
+  usedLearnedAction: boolean;
 }
 
 export async function sendVisitEvent(ctx: AgentDeskContext, visit: VisitEvent): Promise<RaindropStatus> {
@@ -47,6 +49,8 @@ export async function sendVisitEvent(ctx: AgentDeskContext, visit: VisitEvent): 
             durationMs: visit.durationMs,
             capabilities: visit.capabilities.join(","),
             failureKind: visit.failureKind,
+            siteRequests: visit.siteRequests,
+            usedLearnedAction: visit.usedLearnedAction,
           },
           ai_data: {
             input: visit.goal ?? "",
@@ -83,7 +87,7 @@ const SIGNAL_SENTIMENT: Record<string, "POSITIVE" | "NEGATIVE"> = {
 };
 
 /** One signal per name, linked to the visit's event (`event_id` = episodeId). Never throws. */
-export async function sendSignals(ctx: AgentDeskContext, episodeId: string, signals: readonly string[]): Promise<RaindropStatus> {
+export async function sendSignals(ctx: AgentDeskContext, episodeId: string, signals: readonly string[], siteRequests = 0): Promise<RaindropStatus> {
   const key = process.env.RAINDROP_WRITE_KEY?.trim();
   if (!key || signals.length === 0) return "skipped";
 
@@ -101,7 +105,7 @@ export async function sendSignals(ctx: AgentDeskContext, episodeId: string, sign
           signal_type: "default",
           sentiment: SIGNAL_SENTIMENT[name] ?? "POSITIVE",
           timestamp: new Date().toISOString(),
-          properties: { episodeId },
+          properties: { episodeId, siteRequests },
         })),
       ),
     });
