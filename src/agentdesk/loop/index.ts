@@ -1,8 +1,6 @@
-import type { AgentDeskContext } from "../contract/context.js";
+// The Loop (docs/parts/loop.md). agentdesk() calls startLoop(ctx) on boot.
+// core.ts holds the pure decisions; process.ts is the reflector for one episode.
 
-// STUB created by Door so agentdesk() can call startLoop(ctx) today.
-// Owned by Loop (Ricardo): replace this file freely. Keep the export name and signature.
-
-export async function startLoop(ctx: AgentDeskContext): Promise<void> {
-  ctx.log.info("loop: not built yet (stub)");
-}
+export { startLoop, sweepOnce } from "./sweep.js";
+export { processEpisode, type ProcessResult } from "./process.js";
+export { loopMetrics, type LoopMetrics } from "./metrics.js";
