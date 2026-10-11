@@ -1,0 +1,77 @@
+{
+  "_note": "A failed visit before episode-cart-fail.json, same intent. The fallback POST sent qty as a string and got 400. Loop's diff against ep_fixture01 should find: qty must be a number. Use it to test section 4b.",
+  "episode": {
+    "episodeId": "ep_fixture00",
+    "sessionId": "ses_fixture00",
+    "siteId": "demo-store",
+    "agentFamily": "script:shopper",
+    "goal": "add the blue mug to my cart",
+    "intents": [
+      "add_to_cart"
+    ],
+    "turns": [
+      {
+        "role": "agent",
+        "text": "Add the blue mug to my cart",
+        "at": "2026-10-11T19:20:00Z"
+      },
+      {
+        "role": "desk",
+        "text": "I don't know how to do that yet.",
+        "at": "2026-10-11T19:20:01Z"
+      }
+    ],
+    "requestIds": [],
+    "outcome": "open",
+    "goalSuccess": false,
+    "doneNote": "I tried to add the mug from the product page but the site said the quantity was invalid.",
+    "siteSuccess": null,
+    "steps": 0,
+    "durationMs": 0,
+    "priorFailureId": null,
+    "reflection": null,
+    "createdAt": "2026-10-11T19:20:00Z"
+  },
+  "requests": [
+    {
+      "requestId": "req_fixture00a",
+      "sessionId": "ses_fixture00",
+      "episodeId": "ep_fixture00",
+      "siteId": "demo-store",
+      "source": "fallback",
+      "method": "GET",
+      "path": "/products",
+      "query": {
+        "q": "blue mug"
+      },
+      "bodyShape": {},
+      "body": null,
+      "status": 200,
+      "durationMs": 38,
+      "timestamp": "2026-10-11T19:20:03Z",
+      "createdAt": "2026-10-11T19:20:03Z"
+    },
+    {
+      "requestId": "req_fixture00b",
+      "sessionId": "ses_fixture00",
+      "episodeId": "ep_fixture00",
+      "siteId": "demo-store",
+      "source": "fallback",
+      "method": "POST",
+      "path": "/cart/items",
+      "query": {},
+      "bodyShape": {
+        "sku": "string",
+        "qty": "string"
+      },
+      "body": {
+        "sku": "MUG-BLUE",
+        "qty": "one"
+      },
+      "status": 400,
+      "durationMs": 21,
+      "timestamp": "2026-10-11T19:20:06Z",
+      "createdAt": "2026-10-11T19:20:06Z"
+    }
+  ]
+}

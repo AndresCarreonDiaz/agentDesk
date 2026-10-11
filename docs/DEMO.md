@@ -10,9 +10,9 @@
 
 **1:00 Visit 2.** Next agent gets a real answer, then tries "add the blue mug to my cart" and fails at the desk. It falls back to clicking the site; the tap catches `POST /cart/items`. A new capability shows up as observed, then proposed.
 
-**1:30 Visits 3 to 10, sped up.** Agents arrive with different requests. Capabilities turn verified. The learning curve climbs: success up, steps and seconds down. Checkout waits in "needs approval".
+**1:30 Visits 3 to 10, sped up.** Agents arrive with different requests. One visit fails (the agent sends the quantity as text and the site says 400); the next succeeds by clicking. The panel shows the reflector's diff: "the success sent qty as a number". The capability is fixed and the next agent does it in one call. Capabilities turn verified only when the site confirms the write. The learning curve climbs: success up, steps, seconds and failures-before-first-success down. Checkout waits in "needs approval".
 
-**2:00 Developer steers.** Approve checkout. Type a rule: "agents may not apply discount codes". The next agent asks for a discount and is refused, by the guardrail, not by luck.
+**2:00 The desk proposes its own guardrail.** Agents tried discount codes and the site refused them twice. The reflector proposes "agents may not apply discount codes", with the two episodes as evidence. The developer approves it in one click. The next agent asks for a discount and is refused; it tries to click the discount field on the website and the tap refuses that too. The guardrail came from the desk's own failures, not from a developer writing it.
 
 **2:30 Same package, different site.** Drop AgentDesk into an insurance quote form. Empty again. Two visits later it knows how to request a quote.
 
