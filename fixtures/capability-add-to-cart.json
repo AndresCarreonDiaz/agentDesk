@@ -1,0 +1,23 @@
+{
+  "_note": "What Loop should produce from episode-cart-fail.json. Door can use it before Loop is live. embedding is empty until Voyage runs.",
+  "capabilityId": "cap_fixture01",
+  "siteId": "demo-store",
+  "name": "add_to_cart",
+  "description": "Add a product to the cart by SKU and quantity.",
+  "kind": "write",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "sku": { "type": "string" }, "qty": { "type": "integer", "minimum": 1 } },
+    "required": ["sku", "qty"]
+  },
+  "mappedRequest": { "method": "POST", "path": "/cart/items", "bodyTemplate": { "sku": "{{sku}}", "qty": "{{qty}}" } },
+  "stage": "approved",
+  "sourceEpisodeId": "ep_fixture01",
+  "sourceRequestId": "req_fixture02",
+  "verifiedByEpisodeId": null,
+  "stats": { "calls": 0, "successes": 0 },
+  "examples": [{ "input": { "sku": "MUG-BLUE", "qty": 1 }, "requestId": "req_fixture02" }],
+  "embedding": [],
+  "createdAt": "2026-10-11T19:31:00Z",
+  "updatedAt": "2026-10-11T19:31:00Z"
+}

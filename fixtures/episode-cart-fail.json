@@ -1,0 +1,56 @@
+{
+  "_note": "Visit 2 from docs/DEMO.md: the desk could not add to cart, the agent fell back to the website, POST /cart/items worked.",
+  "episode": {
+    "episodeId": "ep_fixture01",
+    "sessionId": "ses_fixture01",
+    "siteId": "demo-store",
+    "agentFamily": "script:shopper",
+    "goal": "add the blue mug to my cart",
+    "intents": ["add_to_cart"],
+    "turns": [
+      { "role": "agent", "text": "Add the blue mug to my cart", "at": "2026-10-11T19:30:00Z" },
+      { "role": "desk", "text": "I don't know how to do that yet.", "at": "2026-10-11T19:30:01Z" }
+    ],
+    "requestIds": [],
+    "outcome": "open",
+    "goalSuccess": true,
+    "steps": 0,
+    "durationMs": 0,
+    "reflection": null,
+    "createdAt": "2026-10-11T19:30:00Z"
+  },
+  "requests": [
+    {
+      "requestId": "req_fixture01",
+      "sessionId": "ses_fixture01",
+      "episodeId": "ep_fixture01",
+      "siteId": "demo-store",
+      "source": "fallback",
+      "method": "GET",
+      "path": "/products",
+      "query": { "q": "blue mug" },
+      "bodyShape": {},
+      "body": null,
+      "status": 200,
+      "durationMs": 40,
+      "timestamp": "2026-10-11T19:30:03Z",
+      "createdAt": "2026-10-11T19:30:03Z"
+    },
+    {
+      "requestId": "req_fixture02",
+      "sessionId": "ses_fixture01",
+      "episodeId": "ep_fixture01",
+      "siteId": "demo-store",
+      "source": "fallback",
+      "method": "POST",
+      "path": "/cart/items",
+      "query": {},
+      "bodyShape": { "sku": "string", "qty": "number" },
+      "body": { "sku": "MUG-BLUE", "qty": 1 },
+      "status": 201,
+      "durationMs": 55,
+      "timestamp": "2026-10-11T19:30:06Z",
+      "createdAt": "2026-10-11T19:30:06Z"
+    }
+  ]
+}
