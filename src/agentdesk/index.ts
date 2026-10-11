@@ -101,7 +101,7 @@ export function agentdesk(options: AgentDeskOptions = {}, log: Logger = consoleL
 
 function isDeskRoute(path: string, panelPath: string): boolean {
   const p = path.replace(/\/+$/, "") || "/";
-  if (p === "/.well-known/agentdesk" || p === "/mcp" || p === "/agent") return true;
+  if (p === "/.well-known/agentdesk" || p === "/.well-known/mcp" || p === "/.well-known/mcp.json" || p === "/mcp" || p === "/agent") return true;
   if (p.startsWith("/agent/") && (TOOL_NAMES as readonly string[]).includes(p.slice("/agent/".length))) return true;
   return p === panelPath || p.startsWith(`${panelPath}/`);
 }
