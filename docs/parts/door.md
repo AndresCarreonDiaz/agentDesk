@@ -46,12 +46,13 @@ See [CONTRACT.md](../CONTRACT.md) sections 1 to 5.
 - Test (no database): `npm test`
 - Check the model and embeddings with your keys: `npm run smoke:llm`
 - Check the tap end to end against Atlas: `npm run smoke:door`
+- Rehearse a real visit against a running store: `BASE_URL=http://localhost:3000 npm run smoke:visit` (HTTP door, website fallback, `done`, then MCP, then what landed in Atlas).
 - Use it in a host: `import { agentdesk } from "./src/agentdesk/index.js"` then `app.use(agentdesk())` **before** your own routes and body parser.
 
 ## Status
 
 - **Order step 1 built:** `agentdesk()` boot (turns itself off without keys, never breaks the host), shared `contract/` (types, config, db bootstrap with collections, indexes and vector indexes, settings and admin token, `llm.ts`, `embed.ts`, `search.ts` with in-process fallback), the tap (records host traffic, session join, redaction, active rules refused with 403). 14 tests pass; Gemini text, JSON and embeddings checked live.
 - **Order steps 2 and 4 built (PR door/tools):** `POST /agent` with the five tools (plain-language `message` routed by the desk brain, or `{ tool, input }`, or `POST /agent/<tool>`), `POST /agent/done`, episodes created on the first call with the `x-agentdesk-session` header, turns appended, discovery at `/.well-known/agentdesk`, teaching 405 on `GET /agent`. `do` replays `mappedRequests` in order with `{{input.x}}` and `{{steps[0].body.y}}` templates, refuses unapproved writes, blocked capabilities and active rules before sending anything, and teaches missing input with an example. 21 tests pass.
-- Waiting on `MONGODB_URI` for the live Atlas check (`npm run smoke:door`).
+- **Checked live on the Atlas sandbox with Harbor Goods (2:13 PM):** `npm run smoke:visit` against `npm run start`. Empty desk says "I don't know yet" on both doors; the brain routes "add a blue mug" to `list_actions` and saves it as the goal; the fallback clicks (`GET /api/products?q=mug`, `POST /api/cart/items` 201) are tapped and joined to the same episode with `bodyShape {sku: string, qty: number}`; `done` saves `goalSuccess` and `doneNote`; MCP records the client name as `agentFamily`. Episodes stay `open` until the Loop closes them.
 - **Order step 5 built:** `/mcp` serves the same five tools over MCP (Streamable HTTP, JSON responses, stateless). On `initialize` it hands out an AgentDesk `ses_` id as `Mcp-Session-Id`, so MCP calls, the episode and the tap share one session, and restarts lose nothing. The client's own name (for example `claude-code`) becomes `agentFamily`. Connect any MCP client to `<site>/mcp`. 23 tests pass, including a real MCP client.
 - Next: step 3 (intent match writes `intents`).

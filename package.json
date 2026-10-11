@@ -16,21 +16,22 @@
     "test:store": "tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "smoke:llm": "tsx --env-file=.env scripts/smoke-llm.ts",
-    "smoke:door": "tsx --env-file=.env scripts/smoke-door.ts"
+    "smoke:door": "tsx --env-file=.env scripts/smoke-door.ts",
+    "smoke:visit": "tsx --env-file=.env scripts/smoke-visit.ts"
   },
   "dependencies": {
     "@google/genai": "^2.28.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "express": "^5.3.0",
     "mongodb": "^7.7.0",
-    "zod": "^4.6.6",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.10.0",
+    "mongodb-memory-server": "^11.3.0",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.7",
-    "mongodb-memory-server": "^11.3.0"
+    "vitest": "^3.2.7"
   }
 }
