@@ -19,7 +19,7 @@ The 3-minute stage demo needs a living website, not a mocked API:
 |---|---|
 | Empty desk | Site is already live. Catalog, cart, checkout work for humans. Desk knows nothing. |
 | Visit 1 | Agent crawls pages / sitemap and can infer “this is a shop that sells mugs”. |
-| Visit 2 | Agent cannot add to cart via the desk. Playwright (or a human) uses the site. Middleware tap sees `POST /cart/items` with `{ sku, qty }`. |
+| Visit 2 | Agent cannot add to cart via the desk. The visitor agent (or a human) uses the site. Middleware tap sees `POST /cart/items` with `{ sku, qty }`. |
 | Visits 3–10 | Search, cart, and checkout HTTP calls are stable, documented-by-traffic, and idempotent enough to become capabilities. |
 | Developer steers | A real coupon exists (`WELCOME10`) so “agents may not apply discount codes” is a visible block, not a fake. |
 | Close | Fake checkout completes an order in Atlas. No real money. |
@@ -40,8 +40,8 @@ Investigation (MongoDB retail ODL, official cart/inventory use cases, Shopify/UC
    - Cart = **one document**, line items embedded, **price/name/sku snapshotted** at add-to-cart.
    - Order = **immutable snapshot** of lines, totals, shipping, payment. Never re-read live product prices for history.
    - Inventory = **one document per SKU**, `_id = sku`, atomic `$inc` with `available: { $gte: qty }` so we cannot oversell.
-3. **Guest session, not user accounts.** Humans get a `harbor_sid` cookie. During an agent visit the cart belongs to the AgentDesk session (`x-agentdesk-session` header or `agentdesk_session` cookie, CONTRACT.md section 2), so the Playwright fallback, the Door's capability calls and the tapped `requests` all share one id.
-4. **HTML that works without a SPA hydration race.** Server-rendered pages (or SSR) so a crawler and Playwright can click “Add to cart” on the blue mug without waiting on a client bundle.
+3. **Guest session, not user accounts.** Humans get a `harbor_sid` cookie. During an agent visit the cart belongs to the AgentDesk session (`x-agentdesk-session` header or `agentdesk_session` cookie, CONTRACT.md section 2), so the website fallback, the Door's capability calls and the tapped `requests` all share one id.
+4. **HTML that works without a SPA hydration race.** Server-rendered pages (or SSR) so a crawler or a browser-driving agent can click “Add to cart” on the blue mug without waiting on a client bundle.
 5. **Machine-readable doors on the origin.** Store serves crawlable HTML, `/sitemap.xml`, and a stub `/llms.txt`. AgentDesk middleware owns `/.well-known/agentdesk`, `POST /agent`, and `/mcp`. Do not pre-document tools in the store; the desk starts empty.
 6. **Money in integer cents**, currency `USD`. Fake payment token only.
 
@@ -67,7 +67,7 @@ Architecture already says TypeScript + Node. Modelence Cloud runs a Node 18+ ser
 
 | Actor | Goal |
 |---|---|
-| Human shopper (judges, Playwright) | Browse, add mug, apply coupon, check out with a fake card. |
+| Human shopper (judges, browser-driving agents) | Browse, add mug, apply coupon, check out with a fake card. |
 | Visiting agent | Discover the site, then either use AgentDesk or fall back to the same HTTP/HTML. |
 | AgentDesk middleware | See every store request/response with session id. |
 | Developer (teammate) | Seed Atlas, run locally, later deploy. |
@@ -164,7 +164,7 @@ HTML forms POST to the same `/api/*` routes (or the server maps `/cart/items` �
 
 | Risk | Mitigation |
 |---|---|
-| SPA-only cart that Playwright / tap cannot see | SSR + JSON APIs; no cart-only-in-React-state. |
+| SPA-only cart that agents / tap cannot see | SSR + JSON APIs; no cart-only-in-React-state. |
 | Desk and store fight over `/agent` | Store does not define AgentDesk routes. Middleware mounts them. |
 | Coupon too hidden for the demo | Visible field on `/cart`. Seeded `WELCOME10`. |
 | Overselling during sped-up visits | High stock (100+) and atomic inventory updates. |

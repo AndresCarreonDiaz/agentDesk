@@ -203,7 +203,7 @@ test('search: "blue mug" finds the blue mug (fixture fallback query)', async () 
 
 test('agent visit: website fallback (cookie) and capability call (header) share one cart', async () => {
   const visit = 'ses_visit0001';
-  // Fallback: Playwright clicks the site with the agentdesk_session cookie set.
+  // Fallback: the visitor agent uses the website with the agentdesk_session cookie set.
   const fallback = await fetch(`${base}/cart/items`, {
     method: 'POST',
     redirect: 'manual',

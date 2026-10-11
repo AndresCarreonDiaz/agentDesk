@@ -7,7 +7,7 @@ Companion to [STORE_PRD.md](./STORE_PRD.md). This is the build contract: stack, 
 ## 1. System context
 
 ```
-browser / Playwright / visiting agent
+browser / visiting agent
         |
         |  HTML + /api + aliased /cart/items
         v
@@ -43,7 +43,7 @@ Store code never writes AgentDesk documents. Do not read `harbor` from the desk 
 |---|---|---|
 | Runtime | Node 20+, TypeScript | Repo + Modelence |
 | HTTP | Express | Simple SSR + JSON, easy middleware tap |
-| HTML | Server-rendered templates (e.g. `lit-html`/Handlebars or TS template strings) | Crawler/Playwright reliable |
+| HTML | Server-rendered templates (e.g. `lit-html`/Handlebars or TS template strings) | Crawlers and browser-driving agents see full pages |
 | Driver | official `mongodb` | No ORM lock-in for a 5-collection app |
 | DB | Atlas sandbox, `MONGODB_URI` | Hackathon rule |
 | Deploy | `PORT`, `npx modelence deploy` later | PLAN.md |
@@ -441,7 +441,7 @@ Automated or manual:
 7. Unknown sku → 404.
 8. `/sitemap.xml` lists `/products/harbor-mug`.
 
-Browser check: with JavaScript, the pages send the JSON in section 6 (verified with Playwright).
+Browser check: with JavaScript, the pages send the JSON in section 6 (verified in a headless browser).
 
 ---
 
