@@ -42,9 +42,14 @@ See [CONTRACT.md](../CONTRACT.md) sections 1 to 5.
 
 ## Run and test
 
-- Run: _fill in_
-- Test: _fill in_
+- Install: `npm install`, then copy `.env.example` to `.env` (set your own `AGENTDESK_DB`).
+- Test (no database): `npm test`
+- Check the model and embeddings with your keys: `npm run smoke:llm`
+- Check the tap end to end against Atlas: `npm run smoke:door`
+- Use it in a host: `import { agentdesk } from "./src/agentdesk/index.js"` then `app.use(agentdesk())` **before** your own routes and body parser.
 
 ## Status
 
-Not started.
+- **Order step 1 built:** `agentdesk()` boot (turns itself off without keys, never breaks the host), shared `contract/` (types, config, db bootstrap with collections, indexes and vector indexes, settings and admin token, `llm.ts`, `embed.ts`, `search.ts` with in-process fallback), the tap (records host traffic, session join, redaction, active rules refused with 403). 14 tests pass; Gemini text, JSON and embeddings checked live.
+- Waiting on `MONGODB_URI` for the live Atlas check (`npm run smoke:door`).
+- Next: step 2 (discovery, `about` / `ask`, sessions and episodes, `done`).
