@@ -3,12 +3,15 @@ import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import express from "express";
 import { hashToken } from "../contract/db.js";
-import { fakeCtx } from "../../../tests/fake-ctx.js";
+import { FakeCollection, fakeCtx } from "../../../tests/fake-ctx.js";
 import { startPanel } from "./index.js";
 
 const TOKEN = "panel-test-token";
 const { ctx, cols } = fakeCtx("panel-site");
 (ctx.settings as { adminTokenHash?: string }).adminTokenHash = hashToken(TOKEN);
+
+const playbooks = new FakeCollection();
+(ctx as unknown as { db: unknown }).db = { collection: () => playbooks };
 
 let server: ReturnType<ReturnType<typeof express>["listen"]>;
 let base = "";
@@ -50,6 +53,32 @@ describe("developer panel", () => {
     assert.equal(state.proposedRules.length, 1);
     assert.equal(typeof state.autopilot, "boolean");
     assert.ok(Array.isArray(state.metrics.visits));
+  });
+
+  it("adds per-visit request counts and playbook versions to the state", async () => {
+    await cols.episodes.insertOne({ episodeId: "ep_2", sessionId: "s_2", outcome: "success", createdAt: new Date(), embedding: [1] });
+    const req = (requestId: string, source: string, status: number) =>
+      cols.requests.insertOne({ requestId, sessionId: "s_2", source, status, method: "POST", path: "/api/cart/items", timestamp: new Date() });
+    await req("r1", "fallback", 400);
+    await req("r2", "fallback", 201);
+    await req("r3", "capability", 201);
+    await playbooks.insertMany([
+      { version: 1, status: "kept", params: { lessonStyle: "example" }, reason: "r", trigger: null, result: "Kept", createdAt: new Date() },
+      { version: 2, status: "trial", params: { lessonStyle: "field" }, reason: "r", trigger: null, result: null, createdAt: new Date() },
+    ]);
+    const state = (await (await call("/api/state")).json()) as Record<string, any>;
+    const ep = state.episodes.find((e: any) => e.episodeId === "ep_2");
+    assert.equal(ep.siteRequests, 2);
+    assert.equal(ep.usedLearned, true);
+    assert.equal(state.episodes.find((e: any) => e.episodeId === "ep_1").siteRequests, 0);
+    assert.deepEqual(state.playbooks.map((p: any) => p.version), [2, 1]);
+  });
+
+  it("serves every section of the page", async () => {
+    const html = await (await call("/")).text();
+    for (const title of ["The desk improved how it teaches", "Visits", "Learned actions", "Guardrails", "Autopilot", "Learning curve"]) {
+      assert.ok(html.includes(`>${title}</h2>`), title);
+    }
   });
 
   it("approves a capability and records feedback; rejects bad input", async () => {

@@ -4,7 +4,7 @@ import { setAutopilot, autopilotOn } from "../contract/autopilot.js";
 import { verifyAdminToken } from "../contract/db.js";
 import { newId } from "../contract/ids.js";
 import { isSensitive, type FeedbackDoc, type RuleDoc } from "../contract/types.js";
-import { loopMetrics } from "../loop/index.js";
+import { loopMetrics, type PlaybookDoc } from "../loop/index.js";
 import { PANEL_HTML } from "./page.js";
 
 // The developer panel (CONTRACT sections 3 to 5): a thin page and a JSON API under one router.
@@ -12,6 +12,10 @@ import { PANEL_HTML } from "./page.js";
 
 const NO_EMBEDDING = { projection: { embedding: 0 } } as const;
 const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+const PLAYBOOK_FIELDS = { projection: { _id: 0, version: 1, params: 1, status: 1, reason: 1, trigger: 1, result: 1, createdAt: 1 } } as const;
+const REQUEST_FIELDS = { projection: { sessionId: 1, source: 1, status: 1, method: 1, path: 1, timestamp: 1 } } as const;
+const MAX_CHIPS = 8;
 
 export function startPanel(ctx: AgentDeskContext): Router {
   const router = Router();
@@ -42,8 +46,42 @@ export function startPanel(ctx: AgentDeskContext): Router {
         autopilotOn(ctx),
         loopMetrics(ctx),
       ]);
+      // Tapped requests of these visits: what the agent sent the site itself, and whether a learned action ran.
+      const sessionIds = episodes.map((e) => e.sessionId).filter((id): id is string => typeof id === "string");
+      const taps = sessionIds.length
+        ? await cols.requests.find({ sessionId: { $in: sessionIds } }, REQUEST_FIELDS).toArray()
+        : [];
+      const bySession = new Map<string, typeof taps>();
+      for (const r of taps) {
+        if (typeof r.sessionId !== "string") continue;
+        const list = bySession.get(r.sessionId) ?? [];
+        list.push(r);
+        bySession.set(r.sessionId, list);
+      }
+      const at = (t: Date | string): number => new Date(t).getTime();
+      const withTaps = episodes.map((e) => {
+        const rows = (bySession.get(e.sessionId) ?? []).sort((a, b) => at(a.timestamp) - at(b.timestamp));
+        return {
+          ...e,
+          siteRequests: rows.filter((r) => r.source === "fallback").length,
+          usedLearned: rows.some((r) => r.source === "capability" && r.status < 300),
+          requests: rows
+            .filter((r) => r.source !== "direct")
+            .slice(0, MAX_CHIPS)
+            .map((r) => ({ method: r.method, path: r.path, status: r.status, source: r.source })),
+        };
+      });
+      // The playbook collection belongs to the Loop; a site that never wrote one simply has no versions.
+      let playbooks: PlaybookDoc[] = [];
+      try {
+        playbooks = (await ctx.db.collection<PlaybookDoc>("playbooks").find({}, PLAYBOOK_FIELDS).sort({ version: -1 }).toArray()) as PlaybookDoc[];
+      } catch {
+        playbooks = [];
+      }
       res.json({
-        episodes,
+        episodes: withTaps,
+        playbooks,
+        site: { siteId: ctx.config.siteId },
         capabilities: capabilities.map((c) => ({ ...c, waiting: c.kind === "write" && c.stage !== "approved" && isSensitive(c) })),
         proposedRules,
         rules,
