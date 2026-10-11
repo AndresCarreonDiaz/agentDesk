@@ -47,7 +47,7 @@ See [CONTRACT.md](../CONTRACT.md) sections 3 to 6.
 
 - Run: nothing to start. `agentdesk()` calls `startLoop(ctx)` on boot, and the Loop sweeps every 3 seconds. An open episode closes when the agent called `done`, or after 60 seconds with no turn and no tapped request (then `outcome: "abandoned"`, `goalSuccess: null`).
 - Use from code (`src/agentdesk/loop/index.ts`):
-  - `processEpisode(ctx, episodeId)`: reflects on one episode; safe to run twice. Returns `{ closed, siteSuccess, capabilityIds, knowledgeIds, ruleIds, raindrop }`.
+  - `processEpisode(ctx, episodeId)`: reflects on one episode; safe to run twice. Returns `{ closed, siteSuccess, capabilityIds, knowledgeIds, ruleIds, signals, raindrop }`.
   - `sweepOnce(ctx)`: closes every open episode that is done or idle.
   - `loopMetrics(ctx)`: `{ visits: [{ n, episodeId, success, steps, seconds }], failuresBeforeFirstSuccess: { [intent]: n } }`.
 - Raindrop: set `RAINDROP_WRITE_KEY` and each processed episode sends one `agent_visit` event (5 second timeout, never throws). Without the key it is `skipped`.
@@ -67,7 +67,8 @@ Live: the Loop is wired to real data (CONTRACT sections 3 to 6).
 - Raindrop: one event per processed episode (Order step 8 basics). Experiments are not built.
 - Metrics: `loopMetrics` gives the learning curve and failures before the first success (Order step 7).
 - Site reading: when a visit ends with `unknown_site` (or the agent says the desk could not tell what the site offers) and the site has no `site_read` knowledge, `readSite` fetches `/`, up to 6 same-origin links, `/llms.txt` and `/sitemap.xml` (GET only, `AGENTDESK_SITE_URL` or `localhost:$PORT`), and writes 3 to 10 `site_read` facts once per site.
-- Not built: capability repair from the diff (`inputSchema` or `mappedRequests` edits), the optional `agentdesk({ success })` oracle, the reflector playbook (Order step 9).
+- Playbook (Order step 9): the `playbooks` collection holds how the reflector teaches. When an agent was shown a field-style failure lesson and repeated that mistake on the route, the Loop opens a trial version (`lessonStyle: "example"`, a full working body) and the next visit that writes to that route keeps it (every example field sent, 2xx) or reverts it. `getPlaybook(ctx)` reads it; `processEpisode` returns `signals` (`action_learned`, `action_verified`, `guardrail_proposed`, `lesson_style_changed`, `lesson_style_kept`, `lesson_style_reverted`), also sent to Raindrop linked to the visit event; `loopMetrics` counts an intent-less visit under its first write route "METHOD /path".
+- Not built: capability repair from the diff (`inputSchema` or `mappedRequests` edits), the optional `agentdesk({ success })` oracle.
 - Known overlap: Door already counts `stats.calls` when `do` runs a capability; the Loop adds one call per processed episode on top, with `successes` judged by `siteSuccess`.
 
 **Explorer (`explore.ts`, built by Door with Ricardo):** after a visit the desk failed (`unknown_site` / `unknown_steps`, or a desk "I don't know yet" turn), the Loop reads the host's own pages (`/llms.txt`, home, sitemap, one page per kind) and learns facts (`knowledge`, source `site_read`) and actions from HTML forms (`capabilities` at `proposed`, `sourceRequestId: "explore:<page>"`, bare `{{field}}` templates, named with `nameCapability`). At most once every 2 minutes per site; the tap does not record these reads. Hook: one line after `classify()` in `process.ts`.

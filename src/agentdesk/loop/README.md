@@ -14,4 +14,5 @@
 - `sweep.ts`: `sweepOnce(ctx)` and `startLoop(ctx)` (every 3 s, unref'd, never throws into the host).
 - `metrics.ts`: `loopMetrics(ctx)`.
 - `naming.ts`: LLM capability names and `why` sentences with deterministic fallbacks; readable diff and lesson text.
-- `raindrop.ts`: one `agent_visit` event per processed episode.
+- `raindrop.ts`: one `agent_visit` event per processed episode, plus its learning signals.
+- `playbook.ts`: the reflector's lesson-style playbook: `getPlaybook(ctx)`, trial open and verdict, lesson wording in `field` or `example` style.
