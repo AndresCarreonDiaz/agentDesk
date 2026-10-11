@@ -229,7 +229,7 @@ test('agent visit: website fallback (cookie) and capability call (header) share 
 
 test('pages: forms post to the JSON API, and the page script parses', async () => {
   const pdp = await (await fetch(`${base}/products/harbor-mug`)).text();
-  assert.match(pdp, /<form class="row" action="\/cart\/items" method="post" data-api/);
+  assert.match(pdp, /<form[^>]* action="\/cart\/items" method="post" data-api/);
   assert.doesNotThrow(() => new Function(PAGE_SCRIPT));
   assert.doesNotMatch(pdp.slice(pdp.indexOf('<style>'), pdp.indexOf('</style>')), /&quot;|&gt;/, 'CSS must not be HTML-escaped');
 });

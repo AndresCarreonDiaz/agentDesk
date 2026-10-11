@@ -26,25 +26,30 @@ export function pagesRouter(c: Collections, siteUrl: string) {
   }
 
   r.get('/', async (_req, res) => {
-    await send(res, { title: STORE_NAME }, views.homePage(await store.listProducts(c, undefined, true)));
+    const all = await store.listProducts(c);
+    await send(res, { title: STORE_NAME, nav: 'home' }, views.homePage(all.filter((p) => p.featured), all));
   });
 
   r.get('/products', async (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-    await send(res, { title: q ? `Search: ${q}` : 'Shop' }, views.listPage(await store.listProducts(c, q), q));
+    const [products, all] = await Promise.all([store.listProducts(c, q), store.listProducts(c)]);
+    await send(res, { title: q ? `Search: ${q}` : 'Shop', nav: 'shop' }, views.listPage(products, q, views.categoriesOf(all)));
   });
 
   r.get('/products/:slug', async (req, res) => {
     const product = await store.getProduct(c, req.params.slug);
     const selected = product.variants.find((v) => v.sku === req.query.variant) ?? product.variants[0];
     const title = product.variants.length > 1 ? `${product.name}, ${selected.label}` : product.name;
-    await send(res, { title, description: product.description }, views.productPage(product, selected));
+    // "You might also like": same category first, then the rest of the featured range.
+    const others = (await store.listProducts(c)).filter((p) => p.slug !== product.slug);
+    const related = [...others.filter((p) => p.category === product.category), ...others.filter((p) => p.category !== product.category)].slice(0, 4);
+    await send(res, { title, description: product.description, nav: 'shop' }, views.productPage(product, selected, related));
   });
 
   r.get('/cart', async (_req, res) => {
     const sid = shopperId(res);
     const cart = (await store.findActiveCart(c, sid)) ?? store.emptyCartView(sid);
-    await send(res, { title: 'Cart' }, views.cartPage(cart));
+    await send(res, { title: 'Cart', nav: 'cart' }, views.cartPage(cart));
   });
 
   r.get('/checkout', async (_req, res) => {
@@ -59,7 +64,7 @@ export function pagesRouter(c: Collections, siteUrl: string) {
   });
 
   r.get('/policies', async (_req, res) => {
-    await send(res, { title: 'Policies' }, views.policiesPage());
+    await send(res, { title: 'Shipping & returns', nav: 'policies' }, views.policiesPage());
   });
 
   r.get('/img/:file', (req, res) => {
