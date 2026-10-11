@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AgentDeskContext } from "../src/agentdesk/contract/context.js";
 import { newId } from "../src/agentdesk/contract/ids.js";
 import type { CapabilityDoc, RequestDoc, RuleDoc } from "../src/agentdesk/contract/types.js";
-import { fillPath, fillTemplate } from "../src/agentdesk/door/replay.js";
+import { fillPath, fillTemplate, readablePage } from "../src/agentdesk/door/replay.js";
 import { clearRuleCache } from "../src/agentdesk/door/rules.js";
 import { createTap } from "../src/agentdesk/door/tap.js";
 import { doAction, listActions } from "../src/agentdesk/door/tools.js";
@@ -21,6 +21,13 @@ describe("replay templates", () => {
     expect(fillTemplate({ sku: "{{input.sku}}", color: "{{input.color}}" }, rc)).toEqual({ sku: "MUG-BLUE" });
     expect(fillPath("/quote/:id/submit", rc)).toBe("/quote/q%201/submit");
     expect(fillPath("/quote/{{steps[0].body.quoteId}}/submit", rc)).toBe("/quote/q_9/submit");
+  });
+});
+
+describe("HTML results", () => {
+  it("turns a page into readable text plus the values its forms carry", () => {
+    const page = readablePage(`<html><head><title>Search: mug</title><style>.x{}</style></head><body><h1>Harbor Mug</h1><p>$24.00</p><form action="/cart/items" method="post"><input type="hidden" name="sku" value="MUG-BLUE"><input name="qty" type="number" value="1"><button>Add</button></form></body></html>`);
+    expect(page).toEqual({ title: "Search: mug", text: "Harbor Mug $24.00 Add", forms: ["POST /cart/items sku=MUG-BLUE qty=1"] });
   });
 });
 
