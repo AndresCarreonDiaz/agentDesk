@@ -65,7 +65,10 @@ export function startPanel(ctx: AgentDeskContext): Router {
       }
       const capabilityId = req.params.capabilityId;
       const now = new Date();
-      const done = await ctx.cols.capabilities.updateOne({ capabilityId }, { $set: { stage, updatedAt: now } });
+      // Approving clears the Door's circuit breaker (CONTRACT v5.1): the developer has reviewed it.
+      const set: Record<string, unknown> = { stage, updatedAt: now };
+      if (stage === "approved") set["stats.consecutiveFailures"] = 0;
+      const done = await ctx.cols.capabilities.updateOne({ capabilityId }, { $set: set });
       if (done.matchedCount === 0) {
         res.status(404).json({ error: "unknown capability" });
         return;
