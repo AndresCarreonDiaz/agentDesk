@@ -155,10 +155,50 @@ export interface SettingsDoc {
   createdAt: Date;
   /** Collections and indexes are created once per schema version, so later starts are fast. */
   schemaVersion?: number;
+  /** Autopilot: learned everyday writes go live without approval (money still asks). The panel toggles it. */
+  autopilot?: boolean;
+}
+
+export type AuditAction =
+  | "ran_unreviewed" // autopilot ran a write nobody has approved yet
+  | "autopilot_on"
+  | "autopilot_off";
+
+/** What autopilot did, for the developer to review later (CONTRACT section 4, "Autopilot"). */
+export interface AuditDoc extends Base {
+  auditId: string;
+  actor: "autopilot" | "developer";
+  action: AuditAction;
+  capabilityId: string | null;
+  capabilityName: string | null;
+  episodeId: string | null;
+  sessionId: string | null;
+  ok: boolean | null;
+  detail: string;
 }
 
 // What the Door offers to agents (CONTRACT section 4).
-export function isOffered(cap: Pick<CapabilityDoc, "kind" | "stage">): boolean {
-  if (cap.kind === "write") return cap.stage === "approved";
-  return cap.stage === "proposed" || cap.stage === "verified" || cap.stage === "approved";
+// Reads: proposed, verified, approved. Writes: approved; on autopilot also proposed and verified,
+// unless the write moves money (checkout, payment, order, refund), which always waits for the developer.
+export function isOffered(
+  cap: Pick<CapabilityDoc, "kind" | "stage"> & Partial<Pick<CapabilityDoc, "name" | "description" | "mappedRequests">>,
+  mode: { autopilot?: boolean } = {},
+): boolean {
+  if (cap.stage === "observed" || cap.stage === "blocked") return false;
+  if (cap.kind === "read") return true;
+  if (cap.stage === "approved") return true;
+  return Boolean(mode.autopilot) && !isSensitive(cap);
+}
+
+/** A write that needs the developer even on autopilot: it looks like it spends money or places an order. */
+const SENSITIVE_WORDS = /checkout|payment|\bpay\b|purchase|\border(s)?\b|billing|invoice|subscri|refund|transfer|withdraw|donat|charge/i;
+const SENSITIVE_FIELDS = /card|cvv|cvc|iban|payment|billing|amount/i;
+export function isSensitive(cap: Partial<Pick<CapabilityDoc, "name" | "description" | "mappedRequests">>): boolean {
+  if (cap.name && SENSITIVE_WORDS.test(cap.name.replace(/_/g, " "))) return true;
+  for (const step of cap.mappedRequests ?? []) {
+    if (SENSITIVE_WORDS.test(step.path)) return true;
+    const body = step.bodyTemplate;
+    if (body && typeof body === "object" && Object.keys(body).some((k) => SENSITIVE_FIELDS.test(k))) return true;
+  }
+  return false;
 }

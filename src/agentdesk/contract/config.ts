@@ -25,6 +25,8 @@ export interface AgentDeskConfig {
   success?: (requests: RequestDoc[]) => boolean;
   /** AGENTDESK_RESET_ADMIN_TOKEN=1: rotate the panel token and print a new link once (lost link recovery). */
   resetAdminToken: boolean;
+  /** Autopilot for a new database (AGENTDESK_AUTOPILOT=off to start with it off). The panel toggles it later. */
+  autopilotDefault: boolean;
 }
 
 export const DEFAULT_MODEL: Record<LlmProvider, string> = {
@@ -86,6 +88,7 @@ export function resolveConfig(options: AgentDeskOptions = {}): AgentDeskConfig {
     voyageBaseUrl: env.VOYAGE_BASE_URL?.trim() || null,
     success: options.success,
     resetAdminToken: env.AGENTDESK_RESET_ADMIN_TOKEN === "1",
+    autopilotDefault: (env.AGENTDESK_AUTOPILOT ?? "on").trim().toLowerCase() !== "off",
   };
 }
 

@@ -69,9 +69,10 @@ export function fakeCtx(siteId = "test-site"): { ctx: AgentDeskContext; cols: Re
     rules: new FakeCollection(),
     feedback: new FakeCollection(),
     settings: new FakeCollection(),
+    audit: new FakeCollection(),
   };
   const ctx = {
-    config: { siteId, panelPath: "/agentdesk", dbName: siteId },
+    config: { siteId, panelPath: "/agentdesk", dbName: siteId, autopilotDefault: false },
     cols,
     settings: { embedding: { provider: "gemini", model: "test", dims: 3 } },
     embedder: { embed: async (t: string[]) => t.map(() => [1, 0, 0]), embedOne: async () => [1, 0, 0] },
