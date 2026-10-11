@@ -1,7 +1,8 @@
 import type { AgentDeskContext } from "../contract/context.js";
 import { cosine } from "../contract/embed.js";
 import { vectorSearch } from "../contract/search.js";
-import { isOffered, type CapabilityDoc, type EpisodeDoc, type RuleDoc } from "../contract/types.js";
+import { autopilotOn, recordAudit } from "../contract/autopilot.js";
+import { isOffered, isSensitive, type CapabilityDoc, type EpisodeDoc, type RuleDoc } from "../contract/types.js";
 import { replay, fillPath, fillTemplate, type StepResult } from "./replay.js";
 import { activeRules, matchesRequest } from "./rules.js";
 
@@ -97,11 +98,17 @@ export interface OfferedAction {
 
 /** Offered = stage allows it (CONTRACT section 4) and no active rule blocks it. */
 export async function offeredCapabilities(ctx: AgentDeskContext): Promise<CapabilityDoc[]> {
-  const [caps, rules] = await Promise.all([
+  const [caps, rules, autopilot] = await Promise.all([
     ctx.cols.capabilities.find({ siteId: ctx.config.siteId, stage: { $in: ["proposed", "verified", "approved"] } }).toArray(),
     activeRules(ctx),
+    autopilotOn(ctx),
   ]);
-  return caps.filter((c) => isOffered(c) && !blockingRuleFor(c, rules));
+  return caps.filter((c) => isOffered(c, { autopilot }) && !blockingRuleFor(c, rules));
+}
+
+/** A write running on autopilot that the developer has not approved yet. */
+function unreviewed(cap: Pick<CapabilityDoc, "kind" | "stage">): boolean {
+  return cap.kind === "write" && cap.stage !== "approved";
 }
 
 export async function listActions(ctx: AgentDeskContext, query?: string): Promise<ToolResult> {
@@ -125,7 +132,9 @@ export async function listActions(ctx: AgentDeskContext, query?: string): Promis
     description: c.description,
     kind: c.kind,
     inputSchema: c.inputSchema,
-    ...(c.stage === "proposed" ? { note: "new: learned recently, not verified yet" } : {}),
+    ...(c.stage === "proposed" || unreviewed(c)
+      ? { note: [c.stage === "proposed" ? "new: learned recently, not verified yet" : null, unreviewed(c) ? "running on autopilot; the site owner reviews it later" : null].filter(Boolean).join("; ") }
+      : {}),
   }));
   return {
     reply: `Actions you can run with do: ${actions.map((a) => `${a.name} (${a.description})`).join("; ")}.`,
@@ -150,8 +159,16 @@ export async function doAction(
   if (cap.stage === "blocked") {
     return refusal(cap, `The site owner has blocked ${cap.name} for agents.`, "blocked");
   }
-  if (!isOffered(cap)) {
-    return refusal(cap, `${cap.name} changes something on the site, so it needs the site owner's approval before agents can run it. Use the website for now.`, "needs_approval");
+  const autopilot = await autopilotOn(ctx);
+  if (!isOffered(cap, { autopilot })) {
+    const money = cap.kind === "write" && isSensitive(cap);
+    return refusal(
+      cap,
+      money
+        ? `${cap.name} moves money or places an order, so the site owner approves it first. Use the website for now.`
+        : `${cap.name} changes something on the site, so it needs the site owner's approval before agents can run it. Use the website for now.`,
+      money ? "needs_approval_money" : "needs_approval",
+    );
   }
 
   const rules = await activeRules(ctx);
@@ -184,6 +201,18 @@ export async function doAction(
   }
   const ok = steps.length === cap.mappedRequests.length && steps.every((s) => s.status < 400);
   await bumpStats(ctx, cap, ok);
+  if (unreviewed(cap)) {
+    await recordAudit(ctx, {
+      actor: "autopilot",
+      action: "ran_unreviewed",
+      capabilityId: cap.capabilityId,
+      capabilityName: cap.name,
+      sessionId: episode.sessionId,
+      episodeId: (episode as Partial<EpisodeDoc>).episodeId ?? null,
+      ok,
+      detail: `${ok ? "Ran" : "Tried"} ${cap.name} for an agent before review: ${steps.map((st) => `${st.method} ${st.path} ${st.status}`).join(", ")}`,
+    });
+  }
   const last = steps[steps.length - 1];
   return {
     reply: ok

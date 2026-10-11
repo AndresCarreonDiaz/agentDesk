@@ -5,6 +5,7 @@ import { chooseEmbedding } from "./embed.js";
 import type {
   CapabilityDoc,
   EpisodeDoc,
+  AuditDoc,
   FeedbackDoc,
   IntentDoc,
   KnowledgeDoc,
@@ -25,6 +26,7 @@ export const COLLECTIONS = {
   rules: "rules",
   feedback: "feedback",
   settings: "settings",
+  audit: "audit",
 } as const;
 
 export interface Collections {
@@ -36,6 +38,7 @@ export interface Collections {
   rules: Collection<RuleDoc>;
   feedback: Collection<FeedbackDoc>;
   settings: Collection<SettingsDoc>;
+  audit: Collection<AuditDoc>;
 }
 
 export function collections(db: Db): Collections {
@@ -48,6 +51,7 @@ export function collections(db: Db): Collections {
     rules: db.collection<RuleDoc>(COLLECTIONS.rules),
     feedback: db.collection<FeedbackDoc>(COLLECTIONS.feedback),
     settings: db.collection<SettingsDoc>(COLLECTIONS.settings),
+    audit: db.collection<AuditDoc>(COLLECTIONS.audit),
   };
 }
 
@@ -81,6 +85,7 @@ const INDEXES: { collection: keyof Collections; key: Document; unique?: boolean 
   { collection: "rules", key: { ruleId: 1 }, unique: true },
   { collection: "rules", key: { siteId: 1, status: 1 } },
   { collection: "feedback", key: { feedbackId: 1 }, unique: true },
+  { collection: "audit", key: { siteId: 1, createdAt: -1 } },
 ];
 
 // Vector indexes: one per embedded collection, with the filter fields each part queries by.
@@ -99,7 +104,7 @@ export interface BootstrapResult {
 }
 
 /** Bump when collections or regular indexes change; installs re-create them once. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export async function bootstrap(db: Db, config: AgentDeskConfig): Promise<BootstrapResult> {
   const cols = collections(db);
@@ -173,6 +178,7 @@ async function ensureSettings(
     installedAt: now,
     embedding: chooseEmbedding(config),
     createdAt: now,
+    autopilot: config.autopilotDefault,
   };
   try {
     await cols.settings.insertOne(doc);

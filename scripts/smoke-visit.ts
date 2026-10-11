@@ -42,15 +42,29 @@ step("visit 1 list_actions", actions.json.reply);
 const cartAsk = await agent("/agent", { message: "Add a blue mug to my cart" }, sessionId);
 step(`visit 1 "add a blue mug to my cart" -> tool ${cartAsk.json.tool}`, cartAsk.json.reply);
 
-// The desk could not do it, so the agent uses the website, carrying its session cookie.
-const products = await site("GET", "/api/products?q=mug", sessionId);
-const product = products.json?.products?.[0];
-const sku = product?.variants?.find((v: any) => /blue/i.test(JSON.stringify(v)))?.sku ?? product?.variants?.[0]?.sku;
-step(`visit 1 fallback GET /api/products?q=mug -> ${products.status}`, { found: products.json?.products?.length ?? 0, product: product?.name, sku });
-const add = await site("POST", "/api/cart/items", sessionId, { sku, qty: 1 });
-step(`visit 1 fallback POST /api/cart/items -> ${add.status}`, { items: add.json?.cart?.items?.map((i: any) => `${i.qty} x ${i.sku}`) });
+// If the desk has learned a cart action, use it: one call. Otherwise use the website, carrying the session cookie.
+const offered: { name: string; note?: string }[] = actions.json?.data?.actions ?? [];
+const learned = offered.find((a) => /cart/i.test(a.name));
+let reached = false;
+let note: string;
+if (learned) {
+  const t = Date.now();
+  const run = await agent("/agent/do", { action: learned.name, input: { sku: "MUG-BLUE", qty: 1 } }, sessionId);
+  reached = run.json?.data?.ok === true;
+  step(`visit 1 do ${learned.name} -> ${reached ? "ok" : "failed"} in ${Date.now() - t} ms (${learned.note ?? "reviewed"})`, run.json.reply);
+  note = reached ? `The desk did it in one call with ${learned.name}.` : `${learned.name} failed: ${run.json.reply}`;
+} else {
+  const products = await site("GET", "/api/products?q=mug", sessionId);
+  const product = products.json?.products?.[0];
+  const sku = product?.variants?.find((v: any) => /blue/i.test(JSON.stringify(v)))?.sku ?? product?.variants?.[0]?.sku;
+  step(`visit 1 fallback GET /api/products?q=mug -> ${products.status}`, { found: products.json?.products?.length ?? 0, product: product?.name, sku });
+  const add = await site("POST", "/api/cart/items", sessionId, { sku, qty: 1 });
+  step(`visit 1 fallback POST /api/cart/items -> ${add.status}`, { items: add.json?.cart?.items?.map((i: any) => `${i.qty} x ${i.sku}`) });
+  reached = add.status < 300;
+  note = "The desk could not add to cart, so I used the website: GET /api/products then POST /api/cart/items.";
+}
 
-const done1 = await agent("/agent/done", { goalSuccess: add.status < 300, note: "The desk could not add to cart, so I used the website: GET /api/products then POST /api/cart/items." }, sessionId);
+const done1 = await agent("/agent/done", { goalSuccess: reached, note }, sessionId);
 step("visit 1 done", done1.json.reply);
 
 // ---- Visit 2: MCP door ----
@@ -74,4 +88,6 @@ for (const sid of [sessionId, mcpSession]) {
 }
 const reqs = await db.collection("requests").find({ sessionId }, { projection: { _id: 0, source: 1, method: 1, path: 1, status: 1, episodeId: 1, bodyShape: 1 } }).sort({ timestamp: 1 }).toArray();
 step(`Atlas requests tapped for visit 1 (${reqs.length})`, reqs);
+const audit = await db.collection("audit").find({ sessionId }, { projection: { _id: 0, actor: 1, action: 1, capabilityName: 1, ok: 1, detail: 1 } }).toArray();
+step(`Atlas audit for visit 1 (${audit.length})`, audit);
 await mongo.close();

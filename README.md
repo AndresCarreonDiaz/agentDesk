@@ -27,6 +27,12 @@ That is all. On first start AgentDesk creates its own `agentdesk` database in yo
 
 Agents always see the same five tools: `about`, `ask`, `list_actions`, `do` and `done`. What the desk learns shows up inside `list_actions`, so agents never need to reconnect.
 
+## Autopilot (on by default)
+
+You should not have to approve everything, or the desk gets stuck. On autopilot, everyday actions the desk learns (add to cart, apply a filter, request a quote) go live for agents right away. **Anything that moves money (checkout, payment, orders, refunds) still waits for your one click.** Every action autopilot runs before you have reviewed it is written to an audit log; later you open the panel and keep it or block it. Your rules ("agents may not apply discount codes") always win. Turn it off with one toggle in the panel, or start with `AGENTDESK_AUTOPILOT=off`.
+
+It is safe because the desk only replays requests your site already accepted from that agent on the website itself, through the same endpoint and the same validation: autopilot adds speed, not new permissions.
+
 Every agent that arrives teaches it something. The first agent asks "what can I do here?" and leaves without an answer. AgentDesk records why it failed, goes and learns the answer, and the next agent gets one. That agent then wants to add something to a cart and gets stuck. AgentDesk watches how the request finally got done, turns it into a capability, and the agent after that does it in one call.
 
 The developer watches it learn in real time, and steers it: approve a capability, block one ("agents may not apply discount codes"), or correct an answer. Each correction becomes part of what AgentDesk knows.
