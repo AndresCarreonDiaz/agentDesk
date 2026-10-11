@@ -1,24 +1,30 @@
 // A tiny in-memory stand-in for the Atlas collections, enough for Door tests without a database.
 // Supports equality filters, $in, sort by one or two fields, limit, $set/$push/$inc/$addToSet.
+// Filters, $set and $inc take dotted paths ("stats.consecutiveFailures") like Mongo, creating missing fields.
 import type { AgentDeskContext } from "../src/agentdesk/contract/context.js";
 
 type Doc = Record<string, any>;
 
+const getPath = (doc: Doc, path: string): any => path.split(".").reduce<any>((o, p) => o?.[p], doc);
+
+function setPath(doc: Doc, path: string, value: unknown): void {
+  const keys = path.split(".");
+  const last = keys.pop()!;
+  const parent = keys.reduce<Doc>((o, k) => (o[k] ??= {}), doc);
+  parent[last] = value;
+}
+
 function matches(doc: Doc, filter: Doc = {}): boolean {
   return Object.entries(filter).every(([k, v]) => {
-    const actual = k.split(".").reduce<any>((o, p) => o?.[p], doc);
+    const actual = getPath(doc, k);
     if (v && typeof v === "object" && !Array.isArray(v) && "$in" in v) return (v.$in as unknown[]).includes(actual);
     return actual === v;
   });
 }
 
 function applyUpdate(doc: Doc, update: Doc): void {
-  for (const [k, v] of Object.entries(update.$set ?? {})) doc[k] = v;
-  for (const [k, v] of Object.entries(update.$inc ?? {})) {
-    const [a, b] = k.split(".");
-    if (b) doc[a][b] = (doc[a][b] ?? 0) + (v as number);
-    else doc[a] = (doc[a] ?? 0) + (v as number);
-  }
+  for (const [k, v] of Object.entries(update.$set ?? {})) setPath(doc, k, v);
+  for (const [k, v] of Object.entries(update.$inc ?? {})) setPath(doc, k, (getPath(doc, k) ?? 0) + (v as number));
   for (const [k, v] of Object.entries(update.$push ?? {})) {
     doc[k] = [...(doc[k] ?? []), ...((v as Doc)?.$each ?? [v])];
   }
@@ -38,10 +44,13 @@ export class FakeCollection {
     if (d) applyUpdate(d, u);
     return { matchedCount: d ? 1 : 0 };
   }
-  async findOneAndUpdate(f: Doc, u: Doc) {
+  // Like the driver: the document before the update, unless returnDocument is "after".
+  async findOneAndUpdate(f: Doc, u: Doc, o: Doc = {}) {
     const d = this.docs.find((x) => matches(x, f));
-    if (d) applyUpdate(d, u);
-    return d ?? null;
+    if (!d) return null;
+    const before = structuredClone(d);
+    applyUpdate(d, u);
+    return o.returnDocument === "after" ? structuredClone(d) : before;
   }
   find(f: Doc = {}) {
     let rows = this.docs.filter((d) => matches(d, f));
