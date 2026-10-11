@@ -1,6 +1,6 @@
 import type { Db, MongoClient } from "mongodb";
 import { resolveConfig, type AgentDeskConfig, type AgentDeskOptions } from "./config.js";
-import { bootstrap, collections, connect, type Collections } from "./db.js";
+import { bootstrap, collections, connect, ensureVectorIndexes, type Collections } from "./db.js";
 import { createEmbedder, type Embedder } from "./embed.js";
 import { createLlm, type Llm } from "./llm.js";
 import type { SettingsDoc } from "./types.js";
@@ -43,11 +43,15 @@ export async function createContext(
   const { client, db } = await connect(config);
   const { settings, adminToken, warnings } = await bootstrap(db, config);
   for (const w of warnings) log.warn(w);
+  const cols = collections(db);
+  ensureVectorIndexes(cols, settings.embedding.dims)
+    .then((ws) => ws.forEach((w) => log.warn(w)))
+    .catch((err) => log.warn(`vector indexes: ${(err as Error).message}`));
   const ctx: AgentDeskContext = {
     config,
     client,
     db,
-    cols: collections(db),
+    cols,
     settings,
     llm: createLlm(config),
     embedder: createEmbedder(settings.embedding, config),
