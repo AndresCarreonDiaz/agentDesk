@@ -88,7 +88,8 @@ export interface CapabilityDoc extends Base {
   sourceEpisodeId: string;
   sourceRequestId: string;
   verifiedByEpisodeId: string | null;
-  stats: { calls: number; successes: number };
+  // Door owns stats. consecutiveFailures and lastFailureAt drive the breaker (isPaused).
+  stats: { calls: number; successes: number; consecutiveFailures?: number; lastFailureAt?: Date | null };
   examples: { input: unknown; requestId: string }[];
   embedding: number[];
   updatedAt: Date;
@@ -162,7 +163,8 @@ export interface SettingsDoc {
 export type AuditAction =
   | "ran_unreviewed" // autopilot ran a write nobody has approved yet
   | "autopilot_on"
-  | "autopilot_off";
+  | "autopilot_off"
+  | "paused_failing"; // the breaker stopped offering a capability after 2 failed runs in a row
 
 /** What autopilot did, for the developer to review later (CONTRACT section 4, "Autopilot"). */
 export interface AuditDoc extends Base {
@@ -188,6 +190,19 @@ export function isOffered(
   if (cap.kind === "read") return true;
   if (cap.stage === "approved") return true;
   return Boolean(mode.autopilot) && !isSensitive(cap);
+}
+
+// The breaker (CONTRACT section 4, "Autopilot"): 2 failed runs in a row pause a capability, whatever
+// its kind or stage. It comes back when the Loop updates it after the last failure (a repair or a
+// relearn sets updatedAt), or when the panel's approve resets consecutiveFailures to 0.
+export function isPaused(cap: Partial<Pick<CapabilityDoc, "stats" | "updatedAt">>): boolean {
+  const failures = cap.stats?.consecutiveFailures ?? 0;
+  const lastFailureAt = cap.stats?.lastFailureAt;
+  if (failures < 2) return false;
+  if (!cap.updatedAt) return true;
+  if (!lastFailureAt) return false;
+  // Compared as times: fixtures and JSON imports carry dates as strings.
+  return new Date(cap.updatedAt).getTime() <= new Date(lastFailureAt).getTime();
 }
 
 /** A write that needs the developer even on autopilot: it looks like it spends money or places an order. */
