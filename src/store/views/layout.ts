@@ -1,4 +1,4 @@
-import { html, type Raw } from './html';
+import { html, raw, type Raw } from './html';
 
 export const STORE_NAME = 'Harbor Goods';
 export const STORE_TAGLINE = 'Small, sturdy things for your desk. Ships anywhere in the US.';
@@ -11,6 +11,7 @@ const ERRORS: Record<string, string> = {
   empty_cart: 'Your cart is empty.',
   invalid_shipping: 'Please fill in name, email, address, city and country.',
   conflict: 'Your cart changed in another tab. Please try again.',
+  already_ordered: 'That order was already placed.',
 };
 
 const CSS = `
@@ -62,6 +63,39 @@ table.lines img{width:56px;height:56px;border-radius:8px}
 @media (max-width:720px){.pdp,.form-grid{grid-template-columns:1fr}header.site nav a{margin-left:10px}table.lines .hide-sm{display:none}}
 `;
 
+// Pages call the real JSON API, like a modern shop: forms marked data-api are sent as JSON
+// (numbers as numbers, "shipping.city" nested), so the traffic AgentDesk learns from is the
+// API itself. Without JavaScript the same forms post normally and get a redirect.
+export const PAGE_SCRIPT = `
+document.addEventListener('submit', async (event) => {
+  const form = event.target.closest('form[data-api]');
+  if (!form) return;
+  event.preventDefault();
+  const data = {};
+  for (const el of form.elements) {
+    if (!el.name || el.name === '_method' || el.disabled) continue;
+    let value = el.type === 'number' ? Number(el.value) : el.value;
+    let path = el.name.split('.');
+    if (el.dataset.last4 !== undefined) { value = el.value.replace(/\\D/g, '').slice(-4); path[path.length - 1] = 'last4'; }
+    let node = data;
+    path.slice(0, -1).forEach((k) => { node = node[k] ??= {}; });
+    node[path[path.length - 1]] = value;
+  }
+  const method = (form.elements._method?.value || form.method).toUpperCase();
+  const button = form.querySelector('[type=submit]');
+  if (button) button.disabled = true;
+  const res = await fetch(form.action, {
+    method,
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: Object.keys(data).length ? JSON.stringify(data) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (res.ok) location.href = json.order ? '/orders/' + json.order.id : form.dataset.next || location.pathname;
+  else if (json.error === 'already_ordered') location.href = '/orders/' + json.orderId;
+  else location.href = location.pathname + '?error=' + encodeURIComponent(json.error || 'bad_request');
+});
+`;
+
 export interface LayoutOptions {
   title: string;
   description?: string;
@@ -79,7 +113,7 @@ export function layout(opts: LayoutOptions, content: Raw): string {
 <title>${title}</title>
 <meta name="description" content="${opts.description ?? STORE_TAGLINE}">
 <link rel="alternate" type="text/plain" href="/llms.txt" title="About this store">
-<style>${CSS}</style>
+<style>${raw(CSS)}</style>
 </head>
 <body>
 <header class="site"><div class="wrap">
@@ -95,6 +129,7 @@ ${content}
   <a href="/policies">Shipping, returns and coupons</a>
   <span>Demo store: payments are simulated.</span>
 </div></footer>
+<script>${raw(PAGE_SCRIPT)}</script>
 </body>
 </html>`}`;
 }

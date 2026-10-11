@@ -1,8 +1,9 @@
+import './env';
 import { pathToFileURL } from 'node:url';
 import type { Db } from 'mongodb';
 import { SEED_COUPONS, STARTING_STOCK, seedProducts } from './catalog';
 import { loadConfig } from './config';
-import { mongoClient } from '../contract/db';
+import { mongoClient } from '../agentdesk/contract/db';
 import { collections, ensureIndexes } from './db';
 
 // Idempotent: products and coupons are replaced by _id; inventory is only created

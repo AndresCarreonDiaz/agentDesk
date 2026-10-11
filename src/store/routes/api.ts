@@ -4,11 +4,16 @@ import type { Collections } from '../db';
 import { body, isForm, parseQty, requireString } from '../http';
 import { shopperId } from '../session';
 import * as store from '../store';
-import type { CartDoc } from '../types';
+import type { CartDoc, OrderDoc } from '../types';
 
 function cartJson(cart: CartDoc) {
   const { _id, shopperId: _sid, ...rest } = cart;
   return { id: _id || null, ...rest };
+}
+
+function orderJson(order: OrderDoc) {
+  const { _id, shopperId: _sid, cartId: _cart, idempotencyKey: _key, ...rest } = order;
+  return { id: _id, ...rest };
 }
 
 // Forms get a 303 back to a page; JSON callers get the resource. Same handler either way,
@@ -69,24 +74,18 @@ export function apiRouter(c: Collections, client: MongoClient) {
 
   r.post('/api/checkout', async (req, res) => {
     const b = body(req);
-    // JSON sends { shipping, payment }; the HTML form posts flat fields.
-    const input: store.CheckoutInput = isForm(req)
-      ? {
-          shipping: b,
-          payment: { method: 'demo', last4: typeof b.cardNumber === 'string' ? b.cardNumber : '' },
-        }
-      : {
-          shipping: (b.shipping ?? {}) as store.CheckoutInput['shipping'],
-          payment: (b.payment ?? {}) as store.CheckoutInput['payment'],
-        };
-    const order = await store.checkout(c, client, shopperId(res), input);
-    const { _id, shopperId: _sid, cartId: _cart, ...rest } = order;
-    reply(req, res, `/orders/${_id}`, { order: { id: _id, ...rest } }, 201);
+    const obj = (v: unknown) => (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+    const { order, replayed } = await store.checkout(c, client, shopperId(res), {
+      shipping: obj(b.shipping),
+      payment: obj(b.payment),
+      // Retrying with the same key returns the same order instead of buying twice.
+      idempotencyKey: req.get('idempotency-key') ?? null,
+    });
+    reply(req, res, `/orders/${order._id}`, { order: orderJson(order), replayed }, replayed ? 200 : 201);
   });
 
   r.get('/api/orders/:id', async (req, res) => {
-    const { _id, shopperId: _sid, cartId: _cart, ...rest } = await store.getOrder(c, shopperId(res), req.params.id);
-    res.json({ order: { id: _id, ...rest } });
+    res.json({ order: orderJson(await store.getOrder(c, shopperId(res), req.params.id)) });
   });
 
   return r;

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { Request, RequestHandler, Response } from 'express';
-import { SESSION_COOKIE as AGENT_COOKIE, SESSION_HEADER as AGENT_HEADER } from '../contract/types';
+import { SESSION_COOKIE as AGENT_COOKIE, SESSION_HEADER as AGENT_HEADER } from '../agentdesk/contract/types';
 
 export const SHOPPER_COOKIE = 'harbor_sid';
 const VALID_ID = /^[A-Za-z0-9_-]{8,64}$/;

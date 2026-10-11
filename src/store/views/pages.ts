@@ -1,7 +1,7 @@
 import { formatCents } from '../money';
 import type { PublicProduct, PublicVariant } from '../store';
 import type { CartDoc, OrderDoc } from '../types';
-import { html } from './html';
+import { html, raw } from './html';
 import { STORE_NAME, STORE_TAGLINE } from './layout';
 
 function fromPrice(p: PublicProduct) {
@@ -51,7 +51,7 @@ export function productPage(p: PublicProduct, selected: PublicVariant) {
         )}</div></div>`
       : ''}
     <p class="muted">SKU ${selected.sku} · ${inStock ? `In stock (${selected.available} available)` : 'Out of stock'}</p>
-    <form class="row" action="/cart/items" method="post">
+    <form class="row" action="/cart/items" method="post" data-api data-next="/cart">
       <input type="hidden" name="sku" value="${selected.sku}">
       <div><label for="qty">Quantity</label><input id="qty" name="qty" type="number" min="1" max="99" value="1" style="width:80px"></div>
       <button class="btn" type="submit" ${inStock ? '' : 'disabled'}>Add to cart</button>
@@ -82,12 +82,12 @@ export function cartPage(cart: CartDoc) {
     <td><a href="/products/${l.slug}?variant=${l.sku}">${l.name}</a><div class="muted">${l.variantLabel} · ${l.sku}</div></td>
     <td>${formatCents(l.unitPriceCents)}</td>
     <td>
-      <form class="row" action="/api/cart/items/${l.sku}" method="post">
+      <form class="row" action="/api/cart/items/${l.sku}" method="post" data-api>
         <input type="hidden" name="_method" value="PATCH">
         <input name="qty" type="number" min="0" max="99" value="${l.qty}" aria-label="Quantity for ${l.name} ${l.variantLabel}" style="width:70px">
         <button class="btn link" type="submit">Update</button>
       </form>
-      <form action="/api/cart/items/${l.sku}" method="post"><input type="hidden" name="_method" value="DELETE"><button class="btn link" type="submit">Remove</button></form>
+      <form action="/api/cart/items/${l.sku}" method="post" data-api><input type="hidden" name="_method" value="DELETE"><button class="btn link" type="submit">Remove</button></form>
     </td>
     <td>${formatCents(l.qty * l.unitPriceCents)}</td>
   </tr>`,
@@ -96,8 +96,8 @@ export function cartPage(cart: CartDoc) {
 ${totals(cart.summary, cart.coupon?.code ?? null)}
 <div class="row" style="justify-content:space-between;margin-top:24px">
   ${cart.coupon
-    ? html`<form action="/api/cart/coupon" method="post"><input type="hidden" name="_method" value="DELETE"><span class="muted">Coupon ${cart.coupon.code} applied.</span> <button class="btn link" type="submit">Remove coupon</button></form>`
-    : html`<form class="row" action="/api/cart/coupon" method="post">
+    ? html`<form action="/api/cart/coupon" method="post" data-api><input type="hidden" name="_method" value="DELETE"><span class="muted">Coupon ${cart.coupon.code} applied.</span> <button class="btn link" type="submit">Remove coupon</button></form>`
+    : html`<form class="row" action="/api/cart/coupon" method="post" data-api>
         <div><label for="code">Coupon code</label><input id="code" name="code" autocomplete="off"></div>
         <button class="btn secondary" type="submit">Apply</button>
       </form>`}
@@ -109,24 +109,27 @@ export function checkoutPage(cart: CartDoc) {
   if (!cart.items.length) {
     return html`<h1>Checkout</h1><p class="muted">Your cart is empty.</p><a class="btn" href="/products">Shop</a>`;
   }
-  const field = (name: string, label: string, opts: { type?: string; full?: boolean; value?: string; auto?: string } = {}) =>
-    html`<div class="field${opts.full ? ' full' : ''}"><label for="${name}">${label}</label><input id="${name}" name="${name}" type="${opts.type ?? 'text'}" value="${opts.value ?? ''}" autocomplete="${opts.auto ?? 'on'}"></div>`;
+  const field = (name: string, label: string, opts: { type?: string; full?: boolean; value?: string; auto?: string; last4?: boolean } = {}) => {
+    const id = name.replace('.', '-');
+    return html`<div class="field${opts.full ? ' full' : ''}"><label for="${id}">${label}</label><input id="${id}" name="${name}" type="${opts.type ?? 'text'}" value="${opts.value ?? ''}" autocomplete="${opts.auto ?? 'on'}"${opts.last4 ? raw(' data-last4') : ''}></div>`;
+  };
   return html`<h1>Checkout</h1>
 <p class="muted">${cart.items.reduce((n, l) => n + l.qty, 0)} item(s) · total ${formatCents(cart.summary.totalCents)}. This is a demo store: no real payment is taken.</p>
-<form action="/api/checkout" method="post">
+<form action="/api/checkout" method="post" data-api>
   <h2>Shipping</h2>
   <div class="form-grid">
-    ${field('name', 'Full name', { full: true, auto: 'name' })}
-    ${field('email', 'Email', { type: 'email', full: true, auto: 'email' })}
-    ${field('line1', 'Address', { full: true, auto: 'address-line1' })}
-    ${field('city', 'City', { auto: 'address-level2' })}
-    ${field('region', 'State', { auto: 'address-level1' })}
-    ${field('postal', 'ZIP', { auto: 'postal-code' })}
-    ${field('country', 'Country', { value: 'US', auto: 'country' })}
+    ${field('shipping.name', 'Full name', { full: true, auto: 'name' })}
+    ${field('shipping.email', 'Email', { type: 'email', full: true, auto: 'email' })}
+    ${field('shipping.line1', 'Address', { full: true, auto: 'address-line1' })}
+    ${field('shipping.city', 'City', { auto: 'address-level2' })}
+    ${field('shipping.region', 'State', { auto: 'address-level1' })}
+    ${field('shipping.postal', 'ZIP', { auto: 'postal-code' })}
+    ${field('shipping.country', 'Country', { value: 'US', auto: 'country' })}
   </div>
   <h2>Payment (demo)</h2>
+  <input type="hidden" name="payment.method" value="demo">
   <div class="form-grid">
-    ${field('cardNumber', 'Card number (any digits, test card 4242 4242 4242 4242)', { full: true, auto: 'off' })}
+    ${field('payment.cardNumber', 'Card number (any digits, test card 4242 4242 4242 4242)', { full: true, auto: 'off', last4: true })}
   </div>
   <button class="btn" type="submit">Place order</button>
 </form>`;

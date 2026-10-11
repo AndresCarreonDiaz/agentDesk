@@ -6,17 +6,15 @@ import { body, isForm } from './http';
 import { apiRouter } from './routes/api';
 import { pagesRouter } from './routes/pages';
 import { session } from './session';
-import { tap } from './tap';
 import { layout } from './views/layout';
 import { notFoundPage } from './views/pages';
 
 export interface AppOptions {
-  storeDb: Db; // host-site data: catalog, carts, orders
-  deskDb: Db; // AgentDesk memory (CONTRACT.md); the tap writes `requests` here
-  siteId: string;
+  storeDb: Db; // the store's own data: catalog, carts, orders
   siteUrl: string;
-  // The Door mounts its routes (/agent, /mcp, /.well-known/agentdesk) here, before the store's.
-  mountDesk?: (app: Express) => void;
+  // The AgentDesk install line goes here: `install: (app) => app.use(agentdesk())`.
+  // It runs after body parsing and the shopper session, before the store's routes.
+  install?: (app: Express) => void;
 }
 
 // HTML forms can only POST; a hidden _method field turns them into PATCH/DELETE
@@ -46,11 +44,14 @@ const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const message = known ? err.message : parseError ? 'Request body is not valid JSON.' : 'Unexpected error.';
   if (!known && !parseError) console.error(err);
 
-  if (isForm(req)) return res.redirect(303, `${safeBackPath(req.get('referer'))}?error=${code}`);
+  if (isForm(req)) {
+    if (known && code === 'already_ordered') return res.redirect(303, `/orders/${err.details.orderId}`);
+    return res.redirect(303, `${safeBackPath(req.get('referer'))}?error=${code}`);
+  }
   if (req.method === 'GET' && !req.path.startsWith('/api') && req.accepts(['json', 'html']) === 'html') {
     return res.status(status).type('html').send(layout({ title: 'Not found', cartCount: 0 }, notFoundPage(message)));
   }
-  res.status(status).json({ error: code, message });
+  res.status(status).json({ error: code, message, ...(known ? err.details : {}) });
 };
 
 export function createApp(opts: AppOptions): Express {
@@ -72,8 +73,7 @@ export function createApp(opts: AppOptions): Express {
   app.use(express.urlencoded({ extended: false, limit: '32kb' }));
   app.use(formMethodOverride);
   app.use(session());
-  app.use(tap(opts.deskDb, opts.siteId));
-  opts.mountDesk?.(app);
+  opts.install?.(app);
 
   app.use(apiRouter(c, opts.storeDb.client));
   app.use(pagesRouter(c, opts.siteUrl));

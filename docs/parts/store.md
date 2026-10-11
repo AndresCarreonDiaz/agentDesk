@@ -37,23 +37,21 @@ See [CONTRACT.md](../CONTRACT.md) sections 2, 3 and 5.
 
 ## Run and test
 
-- Run: `npm run dev:local` (in-memory MongoDB, seeded, no Atlas needed) or `npm run seed && npm run dev` (Atlas Sandbox, `MONGODB_URI` in `.env`).
-- Test: `npm test` (15 acceptance tests: catalog, cart, coupon, transactional checkout, session sharing, tap shape and redaction).
+- Run: `npm run dev:local` (in-memory MongoDB, seeded, no Atlas needed) or `npm run seed && npm run dev` (Atlas Sandbox, `MONGODB_URI` in `.env`). `AGENTDESK=off` runs the store without the package.
+- Test: `npm test` (store: catalog, cart, coupon, transactional and idempotent checkout, shared agent cart, page script; tap: contract shape and redaction).
 - Details: [src/store/README.md](../../src/store/README.md), [STORE_SPEC.md](../STORE_SPEC.md).
 
-## Conventions the contract leaves open (proposed, tell Store if you disagree)
+## Notes for Door and Loop
 
-- `siteId` for the demo store: `demo-store` (same as `fixtures/`).
-- Databases on the Atlas Sandbox cluster: `desk` for the contract collections (`src/contract/db.ts`, override with `MONGODB_DB_DESK`), `harbor` for the store's catalog, carts and orders.
-- The Door marks capability replays with the request header `x-agentdesk-source: capability`. The tap sets `source` from it.
-- The tap returns the `requestId` in the `x-agentdesk-request` response header, so the Door can link a capability call to its `requests` document.
-- Add-to-cart returns `201` (matches `fixtures/episode-cart-fail.json`).
-- During an agent visit the cart belongs to the AgentDesk session, so fallback clicks and capability calls share one cart.
+- Cart is keyed by the AgentDesk session (`x-agentdesk-session` header, then `agentdesk_session` cookie). Humans get the store's own `harbor_sid`.
+- Pages send JSON to the API (`POST /cart/items {"sku":"MUG-BLUE","qty":2}` → `201`), matching `fixtures/episode-cart-fail.json`.
+- `POST /api/checkout` accepts `Idempotency-Key`. A repeat checkout returns `409 already_ordered {orderId}`, not `empty_cart`, so `do` retries never buy twice.
+- Store code for the Door: `src/agentdesk/door/tap.ts` is a tested tap (contract `requests` shape, redaction, `x-agentdesk-source: capability` for replays, `requestId` echoed in `x-agentdesk-request`). Use it or replace it.
 
 ## Status
 
-- [x] 1. Demo store runs locally.
-- [x] 2. Tap writes `requests` (contract shape, tested). **Ready for Loop**, once the Atlas URI is in `.env`.
+- [x] 1. Demo store runs locally, cart keyed by session cookie.
+- [ ] 2. Install line: wired in `src/store/index.ts`, waiting for the Door's `agentdesk()`.
 - [ ] 3. Visitor agent.
 - [ ] 4. Panel on fixtures.
 - [ ] 5. Panel live.

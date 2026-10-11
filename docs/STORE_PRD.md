@@ -34,7 +34,7 @@ Investigation (MongoDB retail ODL, official cart/inventory use cases, Shopify/UC
 
 ### Keep (Atlas / commerce best practice)
 
-1. **One Atlas cluster, two databases.** Commerce (`harbor`) is a bounded context. AgentDesk memory (`desk`) stays in the collections already named in Architecture. Same cluster, no joins across them. The tap correlates them with a **session id**, not a shared schema.
+1. **One Atlas cluster, two databases.** Commerce (`harbor`) is a bounded context. AgentDesk memory (`agentdesk`, CONTRACT.md v2) stays in the collections already named in Architecture. Same cluster, no joins across them. The tap correlates them with a **session id**, not a shared schema.
 2. **Document model matched to access patterns.**
    - Product + a few color variants in **one product document** (always read together).
    - Cart = **one document**, line items embedded, **price/name/sku snapshotted** at add-to-cart.
@@ -76,9 +76,9 @@ Architecture already says TypeScript + Node. Modelence Cloud runs a Node 18+ ser
 
 - Catalog of 6 products, including color variants on the mug.
 - Product list, product detail, cart, checkout, order confirmation.
-- REST under `/api` **and** HTML forms that hit the **same** handlers (so tap sees one shape).
+- Pages call the real JSON API under `/api` (and `/cart/items`); without JavaScript the same forms post to the same handlers.
 - Guest cart: AgentDesk session during agent visits, `harbor_sid` for humans.
-- The tap: every host-app request recorded into `desk.requests` (CONTRACT.md section 3).
+- The install line `app.use(agentdesk())` (the tap inside it is the Door's).
 - Coupon `WELCOME10` (10% off subtotal).
 - Fake checkout that writes an `orders` document and marks the cart `converted`.
 - Seed script into Atlas.
@@ -101,7 +101,7 @@ The store is done when the AgentDesk track can run DEMO.md visits 1â€“2 against 
 3. `POST /api/cart/items` with `{ "sku": "MUG-BLUE", "qty": 1 }` returns 201 and persists in Atlas `carts`.
 4. Checkout creates an `orders` document.
 5. `POST /api/cart/coupon` with `{ "code": "WELCOME10" }` changes totals.
-6. Every request above lands in `desk.requests` with the AgentDesk `sessionId`, `bodyShape` and status.
+6. Every request above is plain JSON over HTTP, so AgentDesk's tap records it with the agent's `sessionId`, `bodyShape` and status.
 
 ---
 
@@ -180,7 +180,7 @@ HTML forms POST to the same `/api/*` routes (or the server maps `/cart/items` â†
 4. Checkout + orders.
 5. Coupon.
 6. sitemap + llms.txt + policies.
-7. Tap writes `requests`. Hand off to Loop (AGENTS.md hand-off 2).
+7. Install line in place; once the Door's `agentdesk()` lands, requests show up in Atlas.
 
 Cut if late: coupon UI (keep API), policies page, search query (keep full list). **Never cut:** blue mug PDP, `POST /cart/items`, Atlas persistence, fake checkout.
 

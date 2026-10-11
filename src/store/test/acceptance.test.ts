@@ -7,12 +7,11 @@ import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
 import { createApp } from '../app';
 import { seedDatabase } from '../seed';
-import { ensureTapIndexes } from '../tap';
+import { PAGE_SCRIPT } from '../views/layout';
 
 let mongo: MongoMemoryReplSet;
 let client: MongoClient;
 let db: Db;
-let desk: Db;
 let base: string;
 let close: () => void;
 
@@ -38,9 +37,7 @@ before(async () => {
   mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   client = await MongoClient.connect(mongo.getUri());
   db = client.db('harbor');
-  desk = client.db('desk');
-  await ensureTapIndexes(desk);
-  const server = createApp({ storeDb: db, deskDb: desk, siteId: 'demo-store', siteUrl: 'http://store.test' }).listen(0);
+  const server = createApp({ storeDb: db, siteUrl: 'http://store.test' }).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   close = () => server.close();
@@ -98,10 +95,31 @@ test('5. checkout to Austin writes an order and converts the cart', async () => 
   assert.equal((await stock('MUG-BLUE'))?.reserved, 0);
 });
 
-test('6. second checkout with an empty cart is rejected', async () => {
+test('6. checking out again right after an order says already_ordered, not empty_cart', async () => {
   const res = await call('POST', '/api/checkout', AUSTIN);
-  assert.equal(res.status, 400);
-  assert.equal((await res.json()).error, 'empty_cart');
+  assert.equal(res.status, 409);
+  const body = await res.json();
+  assert.equal(body.error, 'already_ordered');
+  assert.match(body.orderId, /^ord_/);
+  assert.equal(await db.collection('orders').countDocuments(), 1);
+  const fresh = await call('POST', '/api/checkout', AUSTIN, 'ses_never0001');
+  assert.equal(fresh.status, 400);
+  assert.equal((await fresh.json()).error, 'empty_cart');
+});
+
+test('checkout retry with the same Idempotency-Key returns the same order', async () => {
+  const sid = 'ses_retry0001';
+  await call('POST', '/cart/items', { sku: 'NOTE-DOT', qty: 1 }, sid);
+  const key = { 'idempotency-key': 'k-123' };
+  const first = await call('POST', '/api/checkout', AUSTIN, sid, key);
+  assert.equal(first.status, 201);
+  const second = await call('POST', '/api/checkout', AUSTIN, sid, key);
+  assert.equal(second.status, 200);
+  const a = await first.json();
+  const b = await second.json();
+  assert.equal(b.replayed, true);
+  assert.equal(b.order.id, a.order.id);
+  assert.equal(await db.collection('orders').countDocuments({ shopperId: sid }), 1);
 });
 
 test('7. unknown sku is 404 and leaves stock alone', async () => {
@@ -154,7 +172,11 @@ test('HTML form flow: add, coupon, checkout with redirects', async () => {
   res = await form('/api/cart/coupon', { code: 'WELCOME10' });
   const cartPage = await (await fetch(`${base}/cart`, { headers: { cookie: `harbor_sid=${sid}` } })).text();
   assert.match(cartPage, /data-total-cents="2160"/);
-  res = await form('/api/checkout', { name: 'Sam Lee', email: 's@example.com', line1: '1 Main St', city: 'Austin', region: 'TX', postal: '78701', country: 'US', cardNumber: '4242424242424242' });
+  const checkoutForm = {
+    'shipping.name': 'Sam Lee', 'shipping.email': 's@example.com', 'shipping.line1': '1 Main St', 'shipping.city': 'Austin',
+    'shipping.region': 'TX', 'shipping.postal': '78701', 'shipping.country': 'US', 'payment.method': 'demo', 'payment.cardNumber': '4242424242424242',
+  };
+  res = await form('/api/checkout', checkoutForm);
   assert.equal(res.status, 303);
   const location = res.headers.get('location')!;
   assert.match(location, /^\/orders\/ord_/);
@@ -163,6 +185,9 @@ test('HTML form flow: add, coupon, checkout with redirects', async () => {
   const order = await db.collection('orders').findOne({ shopperId: sid });
   assert.equal(order?.payment.last4, '4242');
   assert.doesNotMatch(JSON.stringify(order), /4242424242424242/);
+  // Double-submitting the form lands on the same order.
+  res = await form('/api/checkout', checkoutForm);
+  assert.equal(res.headers.get('location'), location);
   // Another session cannot read the order.
   assert.equal((await fetch(base + location, { headers: { cookie: 'harbor_sid=someone_else_01' } })).status, 404);
 });
@@ -193,50 +218,22 @@ test('agent visit: website fallback (cookie) and capability call (header) share 
   assert.equal(cart.items[0].qty, 2);
 });
 
-test('tap: writes contract-shaped requests to desk.requests', async () => {
-  await desk.collection('episodes').insertOne({ episodeId: 'ep_tap0001', sessionId: 'ses_tap0001', siteId: 'demo-store' });
-  const res = await call('POST', '/cart/items', { sku: 'MUG-BLUE', qty: 1 }, 'ses_tap0001');
-  const requestId = res.headers.get('x-agentdesk-request');
-  assert.match(requestId ?? '', /^req_/);
-  await call('POST', '/cart/items', { sku: 'MUG-BLUE', qty: 1 }, 'ses_tap0001', { 'x-agentdesk-source': 'capability' });
-  await fetch(`${base}/products?q=blue%20mug`); // a human
-  await fetch(`${base}/img/mug-blue.svg`); // not recorded
-  await new Promise((r) => setTimeout(r, 100)); // the tap writes after the response
-
-  const doc = await desk.collection('requests').findOne({ requestId }, { projection: { _id: 0 } });
-  assert.ok(doc);
-  assert.equal(doc.siteId, 'demo-store');
-  assert.equal(doc.sessionId, 'ses_tap0001');
-  assert.equal(doc.episodeId, 'ep_tap0001');
-  assert.equal(doc.source, 'fallback');
-  assert.equal(doc.method, 'POST');
-  assert.equal(doc.path, '/cart/items');
-  assert.deepEqual(doc.bodyShape, { sku: 'string', qty: 'number' });
-  assert.deepEqual(doc.body, { sku: 'MUG-BLUE', qty: 1 });
-  assert.equal(doc.status, 201);
-  assert.equal(typeof doc.durationMs, 'number');
-  assert.ok(doc.timestamp instanceof Date && doc.createdAt instanceof Date);
-
-  const sources = await desk.collection('requests').find({ sessionId: 'ses_tap0001' }).map((d) => d.source).toArray();
-  assert.deepEqual(sources.sort(), ['capability', 'fallback']);
-  const human = await desk.collection('requests').findOne({ path: '/products', 'query.q': 'blue mug' });
-  assert.equal(human?.sessionId, null);
-  assert.equal(human?.source, 'direct');
-  assert.equal(await desk.collection('requests').countDocuments({ path: /^\/img\// }), 0);
+test('pages: forms post to the JSON API, and the page script parses', async () => {
+  const pdp = await (await fetch(`${base}/products/harbor-mug`)).text();
+  assert.match(pdp, /<form class="row" action="\/cart\/items" method="post" data-api/);
+  assert.doesNotThrow(() => new Function(PAGE_SCRIPT));
+  assert.doesNotMatch(pdp.slice(pdp.indexOf('<style>'), pdp.indexOf('</style>')), /&quot;|&gt;/, 'CSS must not be HTML-escaped');
 });
 
-test('tap: redacts card numbers from checkout forms', async () => {
-  const visit = 'ses_card0001';
-  await call('POST', '/cart/items', { sku: 'CST-CORK', qty: 1 }, visit);
-  await fetch(`${base}/api/checkout`, {
-    method: 'POST',
-    redirect: 'manual',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `agentdesk_session=${visit}` },
-    body: new URLSearchParams({ name: 'Ana', email: 'a@example.com', line1: '1 Main', city: 'Austin', country: 'US', cardNumber: '4242424242424242' }),
-  });
-  await new Promise((r) => setTimeout(r, 100));
-  const doc = await desk.collection('requests').findOne({ sessionId: visit, path: '/api/checkout' });
-  assert.equal(doc?.body.cardNumber, '[redacted]');
-  assert.equal(doc?.body.city, 'Austin');
-  assert.doesNotMatch(JSON.stringify(await desk.collection('requests').find().toArray()), /4242424242424242/);
+test('JSON checkout with nested shipping/payment keeps only the last 4 digits', async () => {
+  const sid = 'ses_json0001';
+  await call('POST', '/cart/items', { sku: 'STK-PACK', qty: 1 }, sid);
+  const res = await call('POST', '/api/checkout', {
+    shipping: AUSTIN.shipping,
+    payment: { method: 'demo', cardNumber: '4000 0000 0000 1234' },
+  }, sid);
+  assert.equal(res.status, 201);
+  const { order } = await res.json();
+  assert.equal(order.payment.last4, '1234');
+  assert.doesNotMatch(JSON.stringify(await db.collection('orders').findOne({ shopperId: sid })), /4000/);
 });

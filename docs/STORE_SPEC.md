@@ -22,7 +22,7 @@ browser / Playwright / visiting agent
 +----------------------------^-----------------------------------+
                              | same HTTP, same cookie
 +-------------------- AgentDesk middleware ----------------------+
-|  tap -> db desk.requests   door -> /agent /mcp /.well-known    |
+|  agentdesk(): tap -> requests, /agent /mcp /agentdesk panel   |
 +----------------------------------------------------------------+
 ```
 
@@ -31,9 +31,9 @@ Two databases on the **same Atlas cluster**:
 | Database | Owner | Collections |
 |---|---|---|
 | `harbor` | this store | `products`, `inventory`, `carts`, `coupons`, `orders` |
-| `desk` | AgentDesk | `episodes`, `requests`, `knowledge`, `capabilities`, `intents`, `rules`, `feedback` |
+| `agentdesk` (`AGENTDESK_DB`) | AgentDesk package | `episodes`, `requests`, `knowledge`, `capabilities`, `intents`, `rules`, `feedback`, `settings` |
 
-Do not write desk documents from store code. Do not read `harbor` from the desk brain except via tapped HTTP and public HTML.
+Store code never writes AgentDesk documents. Do not read `harbor` from the desk brain except via tapped HTTP and public HTML.
 
 ---
 
@@ -51,13 +51,13 @@ Do not write desk documents from store code. Do not read `harbor` from the desk 
 Suggested layout (when we scaffold):
 
 ```
-src/contract/            # shared with Door and Loop (CONTRACT.md): types.ts, db.ts
+src/agentdesk/contract/  # shared with Door and Loop (CONTRACT.md): types.ts, db.ts
 src/store/
   index.ts               # listen on PORT (npm run dev / start)
   dev-local.ts           # in-memory MongoDB for local testing only (npm run dev:local)
-  app.ts                 # createApp({ storeDb, deskDb, siteId, siteUrl, mountDesk })
+  app.ts                 # createApp({ storeDb, siteUrl, install })
   session.ts             # who owns the cart
-  tap.ts                 # writes desk.requests
+  env.ts                 # loads .env before anything reads process.env
   store.ts               # catalog, cart, checkout logic
   routes/  views/  test/
 package.json             # one app at the repo root (CONTRACT.md section 1)
@@ -91,7 +91,7 @@ The cart owner (`shopperId`) is resolved in this order:
 
 
 - One **active** cart per session (`carts.sessionId`, unique partial index on `status: "active"`). The cart has its own `_id`, so after checkout the converted cart stays as history and the same browser gets a fresh cart
-The tap logs the **AgentDesk** session (`null` for humans), never `harbor_sid`.
+AgentDesk's tap logs the **AgentDesk** session (`null` for humans), never `harbor_sid`.
 
 ---
 
@@ -342,11 +342,13 @@ Rules:
 - Insert order snapshot, inventory reserved → sold, cart `converted`
 - New empty cart may be created on next GET
 
-`201` `{ "order": { "id", "summary", "items", "shipping" } }`  
-`400` empty cart or missing shipping  
-`409` stock changed
+Optional header `Idempotency-Key`: a retry with the same key returns the same order (`200`, `replayed: true`) instead of buying twice.
 
-Fake card fields on the HTML form are not validated beyond non-empty; API ignores PAN.
+`201` `{ "order": { "id", "summary", "items", "shipping", "payment" }, "replayed": false }`  
+`400` `empty_cart` or `invalid_shipping`  
+`409` `already_ordered` `{ orderId }`: no active cart, but this shopper placed an order in the last 15 minutes. Agents should treat this as done, not rebuild the cart.
+
+`payment.cardNumber` is accepted instead of `last4`; only the last 4 digits are kept.
 
 ---
 
@@ -366,9 +368,9 @@ Every page: header with store name + cart count, footer with policies link.
 | `GET /sitemap.xml` | `/`, `/products`, each product slug, `/policies` |
 | `GET /llms.txt` | Store name, URL, what it sells, sitemap link. **No** `/agent` tool list (desk injects that). |
 
-HTML forms can only POST, so a hidden `_method=PATCH|DELETE` field routes them to the PATCH/DELETE handlers.
+**Pages call the real JSON API.** Forms marked `data-api` are sent by a small inline script as JSON, with numbers as numbers and `shipping.city`-style names nested, and the card number cut to `last4` in the browser. So the traffic a visitor agent's fallback produces (and AgentDesk learns from) is exactly the API in section 6: `POST /cart/items {"sku":"MUG-BLUE","qty":2}` → `201`.
 
-Forms: `application/x-www-form-urlencoded` accepted on cart/checkout controllers **in addition to JSON**, then redirect (`303`) to `/cart` or `/orders/:id`. Tap still sees method, path, body.
+Without JavaScript the same forms still work: they post `application/x-www-form-urlencoded` (dotted names are unflattened server-side), a hidden `_method=PATCH|DELETE` picks the handler, and the response is a `303` redirect.
 
 Product page for the mug **must** include the literal words `blue mug` in visible HTML (name + description) so visit-1 knowledge extraction is easy.
 
@@ -396,17 +398,17 @@ SVG placeholders in `public/img/` named by sku color.
 
 ## 9. AgentDesk integration contract
 
-`createApp({ storeDb, deskDb, siteId, siteUrl, mountDesk })` in `src/store/app.ts` runs, in order:
+Per CONTRACT.md v2, the store writes **nothing** to the AgentDesk collections. The tap belongs to the Door, inside the `agentdesk()` package. The store's only job is the install line.
 
-1. Body parsers and the session (section 4).
-2. **Tap** (`src/store/tap.ts`): after each response, writes one contract `requests` document to the **desk** database: `requestId` (`req_…`, also sent back as the `x-agentdesk-request` response header), `siteId` (`demo-store`), `sessionId`, `episodeId` (looked up from `episodes` by `sessionId`), `source`, `method`, `path`, `query`, `bodyShape`, a redacted `body` (card, password, token and similar keys become `[redacted]`), `status`, `durationMs`, `timestamp`, `createdAt`. It skips `/health`, `/img/*` and the Door's own routes.
-   - `source`: `capability` when the request carries `x-agentdesk-source: capability` (the Door sets this on replays), else `fallback` when there is an AgentDesk session, else `direct`.
-3. `mountDesk(app)`: the Door mounts its routes here.
-4. Store routes.
+`createApp({ storeDb, siteUrl, install })` in `src/store/app.ts` runs, in order:
+
+1. Body parsers and the shopper session (section 4).
+2. `install(app)`: the one-line install, `app.use(agentdesk())`. `src/store/index.ts` loads `src/agentdesk/index.ts` once the Door ships it; `AGENTDESK=off` runs the bare store for the "before" shot.
+3. Store routes.
 
 Checkout runs in a **multi-document transaction** (cart → converted, inventory reserved → sold, order insert), so it is all or nothing.
 
-Reserved by the desk (store must not use): `/agent`, `/mcp`, `/.well-known/agentdesk`.
+Reserved by AgentDesk (store must not use): `/agent`, `/agentdesk`, `/mcp`, `/.well-known/agentdesk`.
 
 Store **should** add in HTML `<head>`:
 
@@ -422,7 +424,7 @@ Desk may add the agentdesk link tag itself.
 
 - All money: integer cents. Display with `Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })`.
 - Error JSON: `{ "error": "<code>", "message": "<human>" }`
-- Codes: `bad_request`, `not_found`, `out_of_stock`, `invalid_coupon`, `empty_cart`, `invalid_shipping`
+- Codes: `bad_request`, `not_found`, `out_of_stock`, `invalid_coupon`, `empty_cart`, `invalid_shipping`, `already_ordered`, `conflict`
 
 ---
 
@@ -435,11 +437,11 @@ Automated or manual:
 3. `POST /cart/items` `{ "sku": "MUG-BLUE", "qty": 1 }` → cart total 2400; inventory available 99, reserved 1.
 4. `POST /api/cart/coupon` `{ "code": "WELCOME10" }` → discount 240, total 2160.
 5. `POST /api/checkout` with Austin shipping → `orders` count +1, cart `converted`, inventory sold 1 reserved 0.
-6. Second checkout with empty cart → 400.
+6. Second checkout right after an order → 409 `already_ordered` with `orderId`; same `Idempotency-Key` → same order; a shopper with no cart and no recent order → 400 `empty_cart`.
 7. Unknown sku → 404.
 8. `/sitemap.xml` lists `/products/harbor-mug`.
 
-Tap: an add-to-cart sent with `x-agentdesk-session: ses_…` appears in `desk.requests` with that `sessionId`, `source: "fallback"`, `bodyShape: { sku: "string", qty: "number" }`, status 201. Run all of this with `npm test`.
+Browser check: with JavaScript, the pages send the JSON in section 6 (verified with Playwright).
 
 ---
 

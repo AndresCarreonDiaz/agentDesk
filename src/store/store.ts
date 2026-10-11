@@ -218,15 +218,31 @@ const REQUIRED_SHIPPING = ['name', 'email', 'line1', 'city', 'country'] as const
 
 export interface CheckoutInput {
   shipping: Partial<Record<keyof Shipping, unknown>>;
-  payment: { method?: unknown; last4?: unknown };
+  payment: { method?: unknown; last4?: unknown; cardNumber?: unknown };
+  idempotencyKey?: string | null;
 }
+
+export interface CheckoutResult {
+  order: OrderDoc;
+  replayed: boolean; // true when an Idempotency-Key retry returned the existing order
+}
+
+// A shopper whose cart was just converted is told about that order instead of "empty cart",
+// so a retrying agent does not rebuild the cart and buy twice.
+const RECENT_ORDER_MS = 15 * 60 * 1000;
 
 export async function checkout(
   c: Collections,
   client: MongoClient,
   shopperId: string,
   input: CheckoutInput,
-): Promise<OrderDoc> {
+): Promise<CheckoutResult> {
+  const idempotencyKey = input.idempotencyKey?.trim() || null;
+  if (idempotencyKey) {
+    const existing = await c.orders.findOne({ shopperId, idempotencyKey });
+    if (existing) return { order: existing, replayed: true };
+  }
+
   const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
   const shipping: Shipping = {
     name: str(input.shipping.name),
@@ -244,7 +260,8 @@ export async function checkout(
   if (input.payment.method !== 'demo') {
     throw new HttpError(400, 'bad_request', 'Only payment.method "demo" is accepted. This store takes no real payments.');
   }
-  const last4 = str(input.payment.last4).replace(/\D/g, '').slice(-4) || '4242';
+  // Only the last 4 digits are kept, whatever the client sent.
+  const last4 = (str(input.payment.last4) || str(input.payment.cardNumber)).replace(/\D/g, '').slice(-4) || '4242';
 
   // One transaction: the cart flips to converted (which also blocks a double checkout),
   // reserved stock becomes sold, and the order snapshot is written, all or nothing.
@@ -257,7 +274,7 @@ export async function checkout(
         { $set: { status: 'converted', orderId, updatedAt: new Date() } },
         { returnDocument: 'after', session },
       );
-      if (!cart) throw new HttpError(400, 'empty_cart', 'The cart is empty.');
+      if (!cart) throw await nothingToCheckOut(c, shopperId);
 
       await c.inventory.bulkWrite(
         cart.items.map((l) => ({
@@ -281,16 +298,27 @@ export async function checkout(
         })),
         summary: computeSummary(cart.items, cart.coupon),
         couponCode: cart.coupon?.code ?? null,
+        idempotencyKey,
         shipping,
         payment: { method: 'demo', last4, transactionId: newId('demo') },
         createdAt: new Date(),
       };
       await c.orders.insertOne(order, { session });
-      return order;
+      return { order, replayed: false };
     });
   } finally {
     await session.endSession();
   }
+}
+
+async function nothingToCheckOut(c: Collections, shopperId: string): Promise<HttpError> {
+  const last = await c.orders.findOne(
+    { shopperId, createdAt: { $gte: new Date(Date.now() - RECENT_ORDER_MS) } },
+    { sort: { createdAt: -1 }, projection: { _id: 1 } },
+  );
+  return last
+    ? new HttpError(409, 'already_ordered', `This cart was already checked out as order ${last._id}.`, { orderId: last._id })
+    : new HttpError(400, 'empty_cart', 'The cart is empty.');
 }
 
 export async function getOrder(c: Collections, shopperId: string, id: string): Promise<OrderDoc> {

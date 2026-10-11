@@ -6,7 +6,25 @@ export function isForm(req: Request): boolean {
 }
 
 export function body(req: Request): Record<string, unknown> {
-  return (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+  const raw = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+  return isForm(req) ? unflatten(raw) : raw;
+}
+
+// HTML forms name nested fields with dots ("shipping.city"), so a form post and the JSON
+// the page script sends have the same shape: { shipping: { city } }.
+export function unflatten(flat: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(flat)) {
+    const parts = key.split('.');
+    if (parts.some((p) => !p || p === '__proto__' || p === 'constructor' || p === 'prototype')) continue;
+    let node = out;
+    for (const p of parts.slice(0, -1)) {
+      if (typeof node[p] !== 'object' || node[p] === null) node[p] = {};
+      node = node[p] as Record<string, unknown>;
+    }
+    node[parts.at(-1)!] = value;
+  }
+  return out;
 }
 
 export function parseQty(value: unknown, { min, fallback }: { min: number; fallback?: number }): number {

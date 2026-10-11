@@ -90,6 +90,7 @@ export interface OrderDoc {
   items: Omit<CartLine, 'productId' | 'imageUrl'>[];
   summary: Summary;
   couponCode: string | null;
+  idempotencyKey: string | null;
   shipping: Shipping;
   payment: { method: 'demo'; last4: string; transactionId: string };
   createdAt: Date;

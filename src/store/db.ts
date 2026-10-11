@@ -27,5 +27,9 @@ export async function ensureIndexes(db: Db) {
     c.carts.createIndex({ status: 1, updatedAt: 1 }),
     c.coupons.createIndex({ code: 1 }, { unique: true }),
     c.orders.createIndex({ shopperId: 1, createdAt: -1 }),
+    c.orders.createIndex(
+      { shopperId: 1, idempotencyKey: 1 },
+      { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } }, name: 'one_order_per_key' },
+    ),
   ]);
 }

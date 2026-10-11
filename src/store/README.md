@@ -1,15 +1,15 @@
 # Harbor Goods (Store part)
 
-The demo store AgentDesk learns from, plus the tap that records its traffic. Built during the hackathon. Spec: [STORE_SPEC.md](../../docs/STORE_SPEC.md). Part doc: [parts/store.md](../../docs/parts/store.md).
+The demo store AgentDesk is dropped into. Built during the hackathon. Spec: [STORE_SPEC.md](../../docs/STORE_SPEC.md). Part doc: [parts/store.md](../../docs/parts/store.md).
 
-Store data lives in database `harbor` and desk memory in `desk`, both on the **hackathon MongoDB Atlas Sandbox** cluster.
+The store's own data lives in database `harbor` on the **hackathon MongoDB Atlas Sandbox** cluster. AgentDesk uses its own `agentdesk` database on the same cluster; the store never writes to it.
 
 Run from the repo root:
 
 ```bash
 npm install
 npm run dev:local      # no Atlas needed: in-memory MongoDB, seeded, http://localhost:3000 (data lost on exit)
-npm test               # 15 acceptance tests, in-memory MongoDB
+npm test               # store + tap tests, in-memory MongoDB
 
 cp .env.example .env   # paste the Atlas Sandbox URI into MONGODB_URI
 npm run seed           # 6 products, 8 inventory docs, WELCOME10
@@ -18,17 +18,15 @@ npm run dev            # against Atlas
 
 `dev:local` is only for working offline. Run the demo against Atlas.
 
-The demo path: open `/products/harbor-mug`, add the blue mug, apply `WELCOME10` in the cart, then check out to Austin.
-
-An agent visit, as the Door or a visitor agent would make it:
+The demo path: open `/products/harbor-mug`, add the blue mug, apply `WELCOME10` in the cart, then check out to Austin. The pages call the JSON API, so a browser sends exactly what an agent would:
 
 ```bash
 curl -s -X POST localhost:3000/cart/items -H 'content-type: application/json' \
   -H 'x-agentdesk-session: ses_demo0001' -d '{"sku":"MUG-BLUE","qty":1}'
 ```
 
-The tap then writes a `requests` document with `sessionId: "ses_demo0001"`, `source: "fallback"`, `bodyShape: { sku: "string", qty: "number" }` and status 201. To mark a Door replay, add `x-agentdesk-source: capability`.
+During an agent visit the cart belongs to the AgentDesk session (header or `agentdesk_session` cookie), so the visitor's fallback clicks and the Door's `do` calls fill the same cart.
 
-## For the Door
+## The install line
 
-Mount your routes with `createApp({ ..., mountDesk: (app) => app.use(doorRouter) })` in `src/store/app.ts`. They run after the session and tap, before the store's routes. `/agent`, `/mcp` and `/.well-known/*` are yours, and the tap skips them.
+`src/store/index.ts` does `app.use(agentdesk())` as soon as the Door's `src/agentdesk/index.ts` exists. `AGENTDESK=off npm run dev` runs the bare store for the "before" shot. Until the Door lands, the store runs on its own and says so in the log.

@@ -5,6 +5,7 @@ export type ErrorCode =
   | 'invalid_coupon'
   | 'empty_cart'
   | 'invalid_shipping'
+  | 'already_ordered'
   | 'conflict';
 
 export class HttpError extends Error {
@@ -12,6 +13,7 @@ export class HttpError extends Error {
     readonly status: number,
     readonly code: ErrorCode,
     message: string,
+    readonly details: Record<string, unknown> = {},
   ) {
     super(message);
   }
