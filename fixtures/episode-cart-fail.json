@@ -1,22 +1,34 @@
 {
-  "_note": "Visit 2 from docs/DEMO.md: the desk could not add to cart, the agent fell back to the website, POST /cart/items worked.",
+  "_note": "Visit 2 from docs/DEMO.md: the desk could not add to cart, the agent fell back to the website, POST /cart/items worked. Loop should set siteSuccess=true (the POST returned 201) and priorFailureId=ep_fixture00 (see episode-cart-prior-fail.json).",
   "episode": {
     "episodeId": "ep_fixture01",
     "sessionId": "ses_fixture01",
     "siteId": "demo-store",
     "agentFamily": "script:shopper",
     "goal": "add the blue mug to my cart",
-    "intents": ["add_to_cart"],
+    "intents": [
+      "add_to_cart"
+    ],
     "turns": [
-      { "role": "agent", "text": "Add the blue mug to my cart", "at": "2026-10-11T19:30:00Z" },
-      { "role": "desk", "text": "I don't know how to do that yet.", "at": "2026-10-11T19:30:01Z" }
+      {
+        "role": "agent",
+        "text": "Add the blue mug to my cart",
+        "at": "2026-10-11T19:30:00Z"
+      },
+      {
+        "role": "desk",
+        "text": "I don't know how to do that yet.",
+        "at": "2026-10-11T19:30:01Z"
+      }
     ],
     "requestIds": [],
     "outcome": "open",
     "goalSuccess": true,
     "doneNote": "The desk could not add to cart, so I used the website.",
+    "siteSuccess": null,
     "steps": 0,
     "durationMs": 0,
+    "priorFailureId": null,
     "reflection": null,
     "createdAt": "2026-10-11T19:30:00Z"
   },
@@ -29,7 +41,9 @@
       "source": "fallback",
       "method": "GET",
       "path": "/products",
-      "query": { "q": "blue mug" },
+      "query": {
+        "q": "blue mug"
+      },
       "bodyShape": {},
       "body": null,
       "status": 200,
@@ -46,8 +60,14 @@
       "method": "POST",
       "path": "/cart/items",
       "query": {},
-      "bodyShape": { "sku": "string", "qty": "number" },
-      "body": { "sku": "MUG-BLUE", "qty": 1 },
+      "bodyShape": {
+        "sku": "string",
+        "qty": "number"
+      },
+      "body": {
+        "sku": "MUG-BLUE",
+        "qty": 1
+      },
       "status": 201,
       "durationMs": 55,
       "timestamp": "2026-10-11T19:30:06Z",
