@@ -4,7 +4,7 @@
 
 **0:00 Hook.** "dots and Muse now shop for people. They land on sites built for humans and give up. Here is a desk that learns to serve them, starting from nothing."
 
-**0:20 Drop it in.** Show the demo store. Install AgentDesk (three lines). Panel shows: 0 knowledge, 0 capabilities.
+**0:20 Drop it in.** Show the demo store. Install AgentDesk: one line in the server, MONGODB_URI and an LLM key in .env. Panel shows: 0 knowledge, 0 capabilities.
 
 **0:40 Visit 1.** A visitor agent asks "what can I do here?". No answer, agent leaves. The panel shows the episode turn red, with the desk's reflection: "unanswered: site purpose". Knowledge appears a few seconds later.
 

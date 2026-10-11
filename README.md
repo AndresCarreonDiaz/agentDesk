@@ -2,7 +2,28 @@
 
 **Drop it in. It knows nothing. Every agent that visits teaches it.**
 
-AgentDesk is a front desk for AI agents. A developer drops it into any platform (an online store, an image generator, an insurance quote site) as an npm package or a container. On day one it is empty: no docs, no tool list, no config. It just starts accepting agent traffic.
+AgentDesk is a front desk for AI agents. A developer drops it into any platform (an online store, an image generator, an insurance quote site) with one line. On day one it is empty: no docs, no tool list, no config. It just starts accepting agent traffic.
+
+## Install (it should feel like a toggle)
+
+```bash
+npm i agentdesk
+```
+
+```bash
+# .env: MONGODB_URI is usually there already, because the site runs on MongoDB
+MONGODB_URI=...          # your own Atlas cluster: the desk's memory lives here
+ANTHROPIC_API_KEY=...    # or OPENAI_API_KEY: the desk thinks with your own LLM key
+VOYAGE_API_KEY=...       # embeddings for matching requests (today; the goal is zero extra keys)
+```
+
+```ts
+app.use(agentdesk())
+```
+
+That is all. On first start AgentDesk creates its own `agentdesk` database in your cluster (it never touches your app's collections), opens its door to agents, and prints a private link to your panel at `/agentdesk`. No AgentDesk account, no AgentDesk servers.
+
+Agents always see the same five tools: `about`, `ask`, `list_actions`, `do` and `done`. What the desk learns shows up inside `list_actions`, so agents never need to reconnect.
 
 Every agent that arrives teaches it something. The first agent asks "what can I do here?" and leaves without an answer. AgentDesk records why it failed, goes and learns the answer, and the next agent gets one. That agent then wants to add something to a cart and gets stuck. AgentDesk watches how the request finally got done, turns it into a capability, and the agent after that does it in one call.
 
@@ -59,9 +80,17 @@ Built at the Harness Engineering & Model Wrangling #SFTechWeek Hackathon (MongoD
 
 If Atlas Agent Engine is not enabled in the sandbox, AgentDesk enforces the same rules and allowlist itself from its Atlas collections.
 
+## Team
+
+| Part | Who | What |
+|---|---|---|
+| Door | Andres | The drop-in: `agentdesk()` install, tap, discovery, the five agent tools on `/agent` and `/mcp`, rules |
+| Loop | Ricardo | The learning: episode close, reflector, capability stages, metrics, Raindrop |
+| Store | Sebastian | The demo store that installs AgentDesk with one line, visitor agents, the developer panel |
+
 ## Status
 
-Concept stage. Code lands here during the event.
+Contract v2 agreed. Code lands here during the event.
 
 ## Contributing: secret gate
 

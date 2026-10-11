@@ -10,9 +10,10 @@
    +-----------------v-------------------------v------------------+
    |                 host platform (demo store)                   |
    |   +--------------------------------------------------------+ |
-   |   |  AgentDesk middleware                                  | |
-   |   |   - door: discovery, /agent, /mcp (dynamic tools)      | |
+   |   |  app.use(agentdesk())   one package, one line          | |
+   |   |   - door: discovery, /agent, /mcp (five fixed tools)   | |
    |   |   - tap: records every request and response            | |
+   |   |   - loop + panel run in the same process               | |
    |   +--------------------------------------------------------+ |
    +------------------------------|-------------------------------+
                                   |
@@ -22,13 +23,16 @@
                      +------------|-------------+
                                   |
                      +------------v-------------+       +------------------+
-                     |  MongoDB Atlas           |<----->| Developer panel  |
-                     |  memory, capabilities,   | change|  live feed,      |
-                     |  rules, episodes         | stream|  approve/block   |
+                     |  developer's own Atlas   |<----->| Developer panel  |
+                     |  (database "agentdesk")  | change|  /agentdesk      |
+                     |  memory, capabilities,   | stream|  live feed,      |
+                     |  rules, episodes         |       |  approve/block   |
                      +--------------------------+       +------------------+
 ```
 
-1. **Door:** how agents find and talk to the desk. Discovery file, a chat endpoint, and an MCP server whose tool list is rebuilt from the `capabilities` collection (MCP's tool-list-changed notification tells connected agents when it grows).
+Everything above runs inside the host app's own process, from one package. It stores its memory in the developer's own cluster (`MONGODB_URI`) and thinks with the developer's own LLM key. See [CONTRACT.md](CONTRACT.md) section 1 for the install.
+
+1. **Door:** how agents find and talk to the desk. Discovery file, a chat endpoint and an MCP server, both with the same five fixed tools (`about`, `ask`, `list_actions`, `do`, `done`). Learned capabilities come back as data from `list_actions`, because MCP clients cache their tool list and many ignore tool-list-changed.
 2. **Tap:** middleware that records every request to the host app with its session, so a fallback to the human website can be tied back to the agent visit that failed at the desk.
 3. **Desk brain:** the agent that answers visitors. It retrieves relevant knowledge and capabilities for each request, answers, and calls approved capabilities.
 4. **Reflector:** runs after each episode. It classifies the failure, writes knowledge, proposes or repairs capabilities, and records its reasoning ("why it happened").

@@ -14,6 +14,7 @@
     "requestIds": [],
     "outcome": "open",
     "goalSuccess": true,
+    "doneNote": "The desk could not add to cart, so I used the website.",
     "steps": 0,
     "durationMs": 0,
     "reflection": null,
