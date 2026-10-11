@@ -70,7 +70,7 @@ describe("/mcp", () => {
     expect(episodes[0]).toMatchObject({ sessionId, agentFamily: "claude-code", goalSuccess: true, doneNote: "found the blue mug" });
     expect(episodes[0].turns.some((t: any) => t.capability === "search_products")).toBe(true);
     expect(cols.requests.docs).toMatchObject([{ source: "capability", sessionId, path: "/products", query: { q: "blue mug" }, status: 200 }]);
-    expect(cols.capabilities.docs[0].stats).toEqual({ calls: 1, successes: 1 });
+    expect(cols.capabilities.docs[0].stats).toEqual({ calls: 1, successes: 1, consecutiveFailures: 0 });
 
     await client.close();
   });

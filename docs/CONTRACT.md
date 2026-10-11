@@ -139,7 +139,10 @@ All documents carry `siteId` (which host platform) and `createdAt`.
   sourceEpisodeId: string;
   sourceRequestId: string;
   verifiedByEpisodeId: string | null;
-  stats: { calls: number; successes: number };
+  stats: { calls: number; successes: number;
+           consecutiveFailures?: number;   // failed `do` runs in a row; a success sets it back to 0
+           lastFailureAt?: Date | null;    // the last failed run; with the count, drives "Paused" (section 4)
+           pausedFor?: string | null };    // capabilitySignature of the version that failed; a repair changes it
   examples: { input: unknown; requestId: string }[];
   embedding: number[];                  // from contract/embed.ts, for intent match
   updatedAt: Date;
@@ -189,11 +192,11 @@ Door enforces only `active` rules, and on **both paths**: the `do` tool and the 
   autopilot: boolean }   // section 4, "Autopilot"; default from AGENTDESK_AUTOPILOT (on), the panel toggles it
 ```
 
-### `audit` (written by Door when autopilot runs an unreviewed write, and by the panel's toggle)
+### `audit` (written by Door when autopilot runs an unreviewed write or pauses a failing capability, and by the panel's toggle)
 
 ```ts
 { auditId: string; actor: "autopilot" | "developer";
-  action: "ran_unreviewed" | "autopilot_on" | "autopilot_off";
+  action: "ran_unreviewed" | "autopilot_on" | "autopilot_off" | "paused_failing";
   capabilityId: string | null; capabilityName: string | null;
   episodeId: string | null; sessionId: string | null; ok: boolean | null;
   detail: string }   // plain language, shown in the panel
@@ -222,7 +225,7 @@ What the Door offers to agents (`isOffered` in `contract/types.ts`):
 | `read` | `proposed`, `verified`, `approved` |
 | `write` | `approved`; **on autopilot also `proposed` and `verified`**, unless it moves money |
 
-Never offered: `observed`, `blocked`, or anything an active rule blocks.
+Never offered: `observed`, `blocked`, anything an active rule blocks, or a paused capability (`isPaused`, see "Autopilot").
 
 ### Autopilot
 
@@ -231,6 +234,7 @@ The developer should not have to approve every action, or the desk gets stuck. `
 - **On:** learned everyday writes (add to cart, apply a filter, request a quote) go live for agents as soon as they are `proposed`. The developer reviews later.
 - **Money always asks:** a write that looks like checkout, payment, an order, a refund or a transfer (`isSensitive`: its name, path, or payment fields like card, iban, amount) waits for `approved` even on autopilot.
 - **Audit:** every time `do` runs a write that is not `approved`, the Door writes an `audit` entry (`actor: "autopilot"`, `action: "ran_unreviewed"`). The panel lists them: approve keeps it, block stops it. Turning autopilot on or off is audited too.
+- **Paused:** 2 failed `do` runs in a row pause a capability (`isPaused` in `contract/types.ts`), whatever its kind or stage, on autopilot or not. The Door stops offering it, refuses `do` with `paused_failing`, and audits the pause once (`action: "paused_failing"`). The streak lives in `stats.consecutiveFailures` and `stats.lastFailureAt`; a success resets it. It un-pauses on its own when the Loop **repairs** it (what it sends changed: `capabilitySignature` no longer matches `stats.pausedFor`), after a **10 minute cooldown** for one trial run (a success resets it, a failure pauses it again), or when the panel approves it, which sets `stats.consecutiveFailures` to 0. A newer `updatedAt` alone does not un-pause it, because the Loop touches `updatedAt` on every visit that used the capability. Demotion alone is not enough, because autopilot still offers `proposed` writes.
 - **Rules still win:** active rules and `blocked` are always refused, on autopilot or not.
 - **Why it is safe:** the Door only replays requests the host app already accepted from an agent on its own website, through the same endpoint, session and validation. Autopilot adds speed, not new permissions.
 
@@ -281,13 +285,13 @@ The Store part owns the panel code (inside the package) and the demo store, whic
 |---|---|---|---|
 | `requests` | writes (tap) | reads | reads |
 | `episodes` | creates, appends turns, saves `goalSuccess` and `doneNote` | closes: `requestIds`, `outcome`, `siteSuccess`, `steps`, `durationMs`, `priorFailureId`, `reflection` | reads |
-| `capabilities` | reads, increments `stats` | creates, sets other stages | sets `approved` / `blocked` only |
+| `capabilities` | reads, writes `stats` (counts and the failure streak) | creates, sets other stages | sets `approved` / `blocked` only; approve also sets `stats.consecutiveFailures` to 0 |
 | `knowledge` | reads | writes | writes corrections |
 | `intents` | writes | reads | reads |
 | `rules` | reads, enforces `active` rules in `do` and in the tap | writes `proposed` rules only | writes developer rules; sets `active` / `rejected` |
 | `feedback` | – | reads | writes |
 | `settings` | writes on first start; reads `autopilot` | – | reads (admin token); toggles `autopilot` with `setAutopilot` |
-| `audit` | writes `ran_unreviewed` | – | reads; `setAutopilot` writes the toggle lines |
+| `audit` | writes `ran_unreviewed` and `paused_failing` | – | reads; `setAutopilot` writes the toggle lines |
 
 `goalSuccess`: the visitor agent reports it with the `done` tool or `POST /agent/done {sessionId, goalSuccess, note?}` (the Door saves it). The visitor agent never sets a capability stage.
 
@@ -309,3 +313,4 @@ The Store part owns the panel code (inside the package) and the demo store, whic
 - v4.1: default model is `gemini-3.8-flash`; Google closed `gemini-2.5-flash` to new keys.
 - v4.2: template syntax for agent input in `mappedRequests`: `"{{sku}}"` or `"{{input.sku}}"` (the Door accepts both; the Loop writes the bare form).
 - v5: Autopilot. `settings.autopilot` (on by default): learned writes are offered at `proposed` / `verified` without approval, except money (`isSensitive`), which still needs `approved`. New `audit` collection: the Door records every unreviewed write it runs; the panel reviews and toggles. Rules and `blocked` always win.
+- v5.1: Paused (a circuit breaker). The Door counts failed `do` runs in a row in `stats.consecutiveFailures` and `stats.lastFailureAt`; 2 in a row pause the capability (`isPaused`): not offered, `do` refuses with `paused_failing`, and the pause is audited (`paused_failing`). It comes back when the Loop repairs it (`stats.pausedFor` no longer matches), after a 10 minute cooldown for one trial run, or when the panel's approve resets the count to 0.

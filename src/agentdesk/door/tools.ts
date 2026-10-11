@@ -2,7 +2,7 @@ import type { AgentDeskContext } from "../contract/context.js";
 import { cosine } from "../contract/embed.js";
 import { vectorSearch } from "../contract/search.js";
 import { autopilotOn, recordAudit } from "../contract/autopilot.js";
-import { isOffered, isSensitive, type CapabilityDoc, type EpisodeDoc, type RuleDoc } from "../contract/types.js";
+import { capabilitySignature, isOffered, isPaused, isSensitive, type CapabilityDoc, type EpisodeDoc, type RuleDoc } from "../contract/types.js";
 import { replay, fillPath, fillTemplate, type StepResult } from "./replay.js";
 import { activeRules, matchesRequest } from "./rules.js";
 
@@ -96,14 +96,14 @@ export interface OfferedAction {
   note?: string;
 }
 
-/** Offered = stage allows it (CONTRACT section 4) and no active rule blocks it. */
+/** Offered = stage allows it (CONTRACT section 4), it is not paused for failing, and no active rule blocks it. */
 export async function offeredCapabilities(ctx: AgentDeskContext): Promise<CapabilityDoc[]> {
   const [caps, rules, autopilot] = await Promise.all([
     ctx.cols.capabilities.find({ siteId: ctx.config.siteId, stage: { $in: ["proposed", "verified", "approved"] } }).toArray(),
     activeRules(ctx),
     autopilotOn(ctx),
   ]);
-  return caps.filter((c) => isOffered(c, { autopilot }) && !blockingRuleFor(c, rules));
+  return caps.filter((c) => isOffered(c, { autopilot }) && !isPaused(c) && !blockingRuleFor(c, rules));
 }
 
 /** A write running on autopilot that the developer has not approved yet. */
@@ -175,6 +175,14 @@ export async function doAction(
   const byName = blockingRuleFor(cap, rules);
   if (byName) return refusal(cap, `The site owner does not allow agents to do this: ${byName.text}`, "blocked_by_rule", byName);
 
+  if (isPaused(cap)) {
+    // No `capability` on this reply: nothing ran, and the Loop reads a desk turn that names a capability as a call.
+    return {
+      reply: `${cap.name} failed twice in a row, so it is paused while the desk relearns it. Use the website for now.`,
+      data: { ok: false, error: "paused_failing" },
+    };
+  }
+
   const missing = missingRequired(cap.inputSchema, input);
   if (missing.length) {
     return {
@@ -196,11 +204,13 @@ export async function doAction(
   try {
     steps = await replay(baseUrl, episode.sessionId, cap.mappedRequests, input);
   } catch (err) {
-    await bumpStats(ctx, cap, false);
-    return { reply: `${cap.name} could not reach the site: ${(err as Error).message}`, capability: cap.name, data: { ok: false, error: "replay_failed" } };
+    const message = (err as Error).message;
+    await auditPause(ctx, cap, episode, await bumpStats(ctx, cap, false), `could not reach the site (${message})`);
+    return { reply: `${cap.name} could not reach the site: ${message}`, capability: cap.name, data: { ok: false, error: "replay_failed" } };
   }
   const ok = steps.length === cap.mappedRequests.length && steps.every((s) => s.status < 400);
-  await bumpStats(ctx, cap, ok);
+  const failures = await bumpStats(ctx, cap, ok);
+  const trail = steps.map((st) => `${st.method} ${st.path} ${st.status}`).join(", ");
   if (unreviewed(cap)) {
     await recordAudit(ctx, {
       actor: "autopilot",
@@ -210,9 +220,10 @@ export async function doAction(
       sessionId: episode.sessionId,
       episodeId: (episode as Partial<EpisodeDoc>).episodeId ?? null,
       ok,
-      detail: `${ok ? "Ran" : "Tried"} ${cap.name} for an agent before review: ${steps.map((st) => `${st.method} ${st.path} ${st.status}`).join(", ")}`,
+      detail: `${ok ? "Ran" : "Tried"} ${cap.name} for an agent before review: ${trail}`,
     });
   }
+  await auditPause(ctx, cap, episode, failures, trail);
   const last = steps[steps.length - 1];
   return {
     reply: ok
@@ -231,10 +242,44 @@ function blockingRuleFor(cap: CapabilityDoc, rules: RuleDoc[]): RuleDoc | undefi
   return rules.find((r) => r.compiled.capabilities?.some((n) => n === cap.name || n === cap.capabilityId));
 }
 
-async function bumpStats(ctx: AgentDeskContext, cap: CapabilityDoc, ok: boolean): Promise<void> {
-  await ctx.cols.capabilities
-    .updateOne({ capabilityId: cap.capabilityId }, { $inc: { "stats.calls": 1, "stats.successes": ok ? 1 : 0 } })
-    .catch((err) => ctx.log.error("do: could not update stats", err));
+/** Door owns stats (CONTRACT section 5). Returns the failures in a row after this run; 0 on success or a write error. */
+async function bumpStats(ctx: AgentDeskContext, cap: CapabilityDoc, ok: boolean): Promise<number> {
+  const filter = { capabilityId: cap.capabilityId };
+  try {
+    if (ok) {
+      await ctx.cols.capabilities.updateOne(filter, { $inc: { "stats.calls": 1, "stats.successes": 1 }, $set: { "stats.consecutiveFailures": 0 } });
+      return 0;
+    }
+    // One atomic update, so when two failures race only one of them sees exactly 2.
+    const after = await ctx.cols.capabilities.findOneAndUpdate(
+      filter,
+      {
+        $inc: { "stats.calls": 1, "stats.successes": 0, "stats.consecutiveFailures": 1 },
+        // pausedFor remembers the version that failed, so a Loop repair (a new signature) un-pauses it.
+        $set: { "stats.lastFailureAt": new Date(), "stats.pausedFor": capabilitySignature(cap) },
+      },
+      { returnDocument: "after", projection: { stats: 1 } },
+    );
+    return after?.stats?.consecutiveFailures ?? 0;
+  } catch (err) {
+    ctx.log.error("do: could not update stats", err);
+    return 0;
+  }
+}
+
+/** The failure that makes the streak exactly 2 is the one that paused it (isPaused): one audit line per streak. */
+async function auditPause(ctx: AgentDeskContext, cap: CapabilityDoc, episode: Pick<EpisodeDoc, "sessionId">, failures: number, what: string): Promise<void> {
+  if (failures !== 2) return;
+  await recordAudit(ctx, {
+    actor: "autopilot",
+    action: "paused_failing",
+    capabilityId: cap.capabilityId,
+    capabilityName: cap.name,
+    sessionId: episode.sessionId,
+    episodeId: (episode as Partial<EpisodeDoc>).episodeId ?? null,
+    ok: false,
+    detail: `Paused ${cap.name} after 2 failures in a row: ${what}`,
+  });
 }
 
 function missingRequired(schema: object, input: Record<string, unknown>): string[] {

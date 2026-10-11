@@ -88,7 +88,8 @@ export interface CapabilityDoc extends Base {
   sourceEpisodeId: string;
   sourceRequestId: string;
   verifiedByEpisodeId: string | null;
-  stats: { calls: number; successes: number };
+  // Door owns stats. consecutiveFailures and lastFailureAt drive the breaker (isPaused).
+  stats: { calls: number; successes: number; consecutiveFailures?: number; lastFailureAt?: Date | null; pausedFor?: string | null };
   examples: { input: unknown; requestId: string }[];
   embedding: number[];
   updatedAt: Date;
@@ -162,7 +163,8 @@ export interface SettingsDoc {
 export type AuditAction =
   | "ran_unreviewed" // autopilot ran a write nobody has approved yet
   | "autopilot_on"
-  | "autopilot_off";
+  | "autopilot_off"
+  | "paused_failing"; // the breaker stopped offering a capability after 2 failed runs in a row
 
 /** What autopilot did, for the developer to review later (CONTRACT section 4, "Autopilot"). */
 export interface AuditDoc extends Base {
@@ -188,6 +190,32 @@ export function isOffered(
   if (cap.kind === "read") return true;
   if (cap.stage === "approved") return true;
   return Boolean(mode.autopilot) && !isSensitive(cap);
+}
+
+// The breaker (CONTRACT section 4, "Autopilot"): 2 failed runs in a row pause a capability, whatever
+// its kind or stage. It comes back on its own when the Loop repairs it (what it sends changed since it
+// failed), after a 10 minute cooldown for one trial run (success resets it, failure pauses it again),
+// or when the panel's approve resets consecutiveFailures to 0. It does not trust updatedAt: the Loop
+// touches that on every visit that used the capability, repaired or not.
+export const PAUSE_COOLDOWN_MS = 10 * 60_000;
+
+/** What a capability sends: its requests and inputs. A Loop repair changes it. */
+export function capabilitySignature(cap: Partial<Pick<CapabilityDoc, "mappedRequests" | "inputSchema">>): string {
+  return JSON.stringify([cap.mappedRequests ?? [], cap.inputSchema ?? {}]);
+}
+
+export function isPaused(
+  cap: Partial<Pick<CapabilityDoc, "stats" | "mappedRequests" | "inputSchema">>,
+  now: number = Date.now(),
+): boolean {
+  const failures = cap.stats?.consecutiveFailures ?? 0;
+  if (failures < 2) return false;
+  // Compared as times: fixtures and JSON imports carry dates as strings.
+  const last = cap.stats?.lastFailureAt ? new Date(cap.stats.lastFailureAt).getTime() : 0;
+  if (now - last >= PAUSE_COOLDOWN_MS) return false; // half-open: one trial run
+  const pausedFor = cap.stats?.pausedFor;
+  if (pausedFor && pausedFor !== capabilitySignature(cap)) return false; // repaired by the Loop
+  return true;
 }
 
 /** A write that needs the developer even on autopilot: it looks like it spends money or places an order. */
