@@ -20,6 +20,8 @@ export interface AgentDeskConfig {
   llm: { provider: LlmProvider; apiKey: string; model: string };
   geminiApiKey: string | null; // Gemini embeddings need it even if another LLM thinks
   voyageApiKey: string | null;
+  /** Optional: force one Voyage endpoint. By default Atlas (ai.mongodb.com) is tried first, then api.voyageai.com. */
+  voyageBaseUrl: string | null;
   success?: (requests: RequestDoc[]) => boolean;
   /** AGENTDESK_RESET_ADMIN_TOKEN=1: rotate the panel token and print a new link once (lost link recovery). */
   resetAdminToken: boolean;
@@ -81,6 +83,7 @@ export function resolveConfig(options: AgentDeskOptions = {}): AgentDeskConfig {
     llm,
     geminiApiKey: gemini,
     voyageApiKey,
+    voyageBaseUrl: env.VOYAGE_BASE_URL?.trim() || null,
     success: options.success,
     resetAdminToken: env.AGENTDESK_RESET_ADMIN_TOKEN === "1",
   };
