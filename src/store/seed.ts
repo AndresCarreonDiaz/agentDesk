@@ -2,7 +2,8 @@ import { pathToFileURL } from 'node:url';
 import type { Db } from 'mongodb';
 import { SEED_COUPONS, STARTING_STOCK, seedProducts } from './catalog';
 import { loadConfig } from './config';
-import { collections, connect, ensureIndexes } from './db';
+import { mongoClient } from '../contract/db';
+import { collections, ensureIndexes } from './db';
 
 // Idempotent: products and coupons are replaced by _id; inventory is only created
 // if missing, so re-seeding never wipes stock that carts have reserved.
@@ -36,9 +37,9 @@ export async function seedDatabase(db: Db) {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const config = loadConfig();
-  const { client, db } = await connect(config.mongoUri, config.dbName);
+  const client = await mongoClient();
   try {
-    console.log(`Seeded ${config.dbName}:`, await seedDatabase(db));
+    console.log(`Seeded ${config.storeDb}:`, await seedDatabase(client.db(config.storeDb)));
   } finally {
     await client.close();
   }

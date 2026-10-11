@@ -12,7 +12,7 @@ browser / Playwright / visiting agent
         |  HTML + /api + aliased /cart/items
         v
 +-------------------- Harbor Goods (this spec) ------------------+
-|  session cookie harbor_sid                                     |
+|  shopper: agentdesk session, else cookie harbor_sid            |
 |  SSR pages    JSON API    sitemap / llms.txt                   |
 |                         |                                      |
 |                         v                                      |
@@ -51,15 +51,16 @@ Do not write desk documents from store code. Do not read `harbor` from the desk 
 Suggested layout (when we scaffold):
 
 ```
-apps/store/
-  src/index.ts           # listen on PORT
-  src/db.ts              # client, db harbor
-  src/session.ts         # harbor_sid
-  src/routes/pages.ts
-  src/routes/api.ts
-  src/seed.ts
-  public/
-package.json             # workspace or this folder
+src/contract/            # shared with Door and Loop (CONTRACT.md): types.ts, db.ts
+src/store/
+  index.ts               # listen on PORT (npm run dev / start)
+  dev-local.ts           # in-memory MongoDB for local testing only (npm run dev:local)
+  app.ts                 # createApp({ storeDb, deskDb, siteId, siteUrl, mountDesk })
+  session.ts             # who owns the cart
+  tap.ts                 # writes desk.requests
+  store.ts               # catalog, cart, checkout logic
+  routes/  views/  test/
+package.json             # one app at the repo root (CONTRACT.md section 1)
 ```
 
 If the team prefers Next.js App Router, keep **route paths, JSON bodies, and Atlas schemas identical**.
@@ -77,20 +78,20 @@ SITE_URL=http://localhost:3000
 
 Read **only** `MONGODB_URI` and exit with an error if it is missing. Do **not** fall back to Modelence's `MONGO_URL`: that would quietly move the data off the hackathon sandbox, which breaks the finalist rule. On Modelence, set `MONGODB_URI` explicitly to the sandbox URI. Listen on `process.env.PORT || 3000`.
 
-`.env` is gitignored. Commit `apps/store/.env.example` with placeholder values only.
+`.env` is gitignored. Commit `.env.example` (repo root) with placeholder values only.
 
 ---
 
 ## 4. Session
 
-- Cookie name: `harbor_sid`
-- Value: 24-byte hex (or UUID)
-- `httpOnly`, `sameSite=Lax`, `path=/`, 7-day max-age
-- Created on first request if missing
-- One **active** cart per session (`carts.sessionId`, unique partial index on `status: "active"`). The cart has its own `_id`, so after checkout the converted cart stays as history and the same browser gets a fresh cart
-- JSON APIs must still work if the client sends `x-session-id` (Playwright/agents)
+The cart owner (`shopperId`) is resolved in this order:
 
-Tap should log `sessionId` from cookie or header.
+1. `x-agentdesk-session` header, then `agentdesk_session` cookie (CONTRACT.md section 2). During an agent visit, the website fallback and the Door's capability calls then share **one cart**, and no `harbor_sid` is set.
+2. Otherwise the store's own cookie `harbor_sid`: 24-byte hex, `httpOnly`, `sameSite=Lax`, `path=/`, 7-day max-age, created on the first request.
+
+
+- One **active** cart per session (`carts.sessionId`, unique partial index on `status: "active"`). The cart has its own `_id`, so after checkout the converted cart stays as history and the same browser gets a fresh cart
+The tap logs the **AgentDesk** session (`null` for humans), never `harbor_sid`.
 
 ---
 
@@ -180,7 +181,7 @@ Hackathon skip: no background expiry job. Stock starts at 100.
 ```json
 {
   "_id": "cart_...",
-  "sessionId": "<harbor_sid>",
+  "shopperId": "<agentdesk session or harbor_sid>",
   "status": "active",
   "items": [
     {
@@ -229,7 +230,8 @@ Unknown or inactive code → `400` `{ error: "invalid_coupon" }`.
 ```json
 {
   "_id": "ord_...",
-  "sessionId": "<harbor_sid>",
+  "shopperId": "<agentdesk session or harbor_sid>",
+  "cartId": "cart_...",
   "status": "paid",
   "items": [ { "sku": "MUG-BLUE", "name": "Harbor Mug", "variantLabel": "Blue", "qty": 1, "unitPriceCents": 2400 } ],
   "summary": { "subtotalCents": 2400, "discountCents": 240, "shippingCents": 0, "totalCents": 2160, "currency": "USD" },
@@ -257,7 +259,7 @@ No updates except optional `status` (keep `paid` for demo). Snapshot names and p
 Base: same origin. JSON `Content-Type: application/json`.  
 **Alias:** `POST /cart/items` = `POST /api/cart/items` (DEMO.md).
 
-All mutating cart/checkout routes require a session (cookie or `x-session-id`).
+All cart/checkout routes act on the shopper from section 4 (AgentDesk session, else `harbor_sid`).
 
 ### 6.1 `GET /health`
 
@@ -294,7 +296,7 @@ Rules:
 - Upsert line: if sku already in cart, add qty
 - Recalc summary
 
-`200` `{ "cart": { ... } }`  
+`201` `{ "cart": { ... } }` (JSON; forms get `303` to `/cart`)  
 `404` unknown sku  
 `409` out of stock  
 `400` bad qty
@@ -394,11 +396,15 @@ SVG placeholders in `public/img/` named by sku color.
 
 ## 9. AgentDesk integration contract
 
-Store app exports or wraps the Express `app` so middleware can:
+`createApp({ storeDb, deskDb, siteId, siteUrl, mountDesk })` in `src/store/app.ts` runs, in order:
 
-1. Run first: assign session.
-2. Tap: after response, write `{ method, path, bodyShape, status, sessionId, ts }` to **desk** `requests` (implemented by AgentDesk track, not this spec).
-3. Mount desk door routes without colliding with `/api`, `/cart/items`, `/products`.
+1. Body parsers and the session (section 4).
+2. **Tap** (`src/store/tap.ts`): after each response, writes one contract `requests` document to the **desk** database: `requestId` (`req_…`, also sent back as the `x-agentdesk-request` response header), `siteId` (`demo-store`), `sessionId`, `episodeId` (looked up from `episodes` by `sessionId`), `source`, `method`, `path`, `query`, `bodyShape`, a redacted `body` (card, password, token and similar keys become `[redacted]`), `status`, `durationMs`, `timestamp`, `createdAt`. It skips `/health`, `/img/*` and the Door's own routes.
+   - `source`: `capability` when the request carries `x-agentdesk-source: capability` (the Door sets this on replays), else `fallback` when there is an AgentDesk session, else `direct`.
+3. `mountDesk(app)`: the Door mounts its routes here.
+4. Store routes.
+
+Checkout runs in a **multi-document transaction** (cart → converted, inventory reserved → sold, order insert), so it is all or nothing.
 
 Reserved by the desk (store must not use): `/agent`, `/mcp`, `/.well-known/agentdesk`.
 
@@ -433,7 +439,7 @@ Automated or manual:
 7. Unknown sku → 404.
 8. `/sitemap.xml` lists `/products/harbor-mug`.
 
-When AgentDesk tap exists: the add-to-cart call appears in `desk.requests` with `sessionId` equal to `harbor_sid`.
+Tap: an add-to-cart sent with `x-agentdesk-session: ses_…` appears in `desk.requests` with that `sessionId`, `source: "fallback"`, `bodyShape: { sku: "string", qty: "number" }`, status 201. Run all of this with `npm test`.
 
 ---
 

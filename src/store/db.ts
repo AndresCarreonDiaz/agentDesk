@@ -1,4 +1,4 @@
-import { MongoClient, type Db } from 'mongodb';
+import type { Db } from 'mongodb';
 import type { CartDoc, CouponDoc, InventoryDoc, OrderDoc, ProductDoc } from './types';
 
 export type Collections = ReturnType<typeof collections>;
@@ -13,12 +13,6 @@ export function collections(db: Db) {
   };
 }
 
-export async function connect(uri: string, dbName: string) {
-  const client = new MongoClient(uri, { appName: 'harbor-goods' });
-  await client.connect();
-  return { client, db: client.db(dbName) };
-}
-
 export async function ensureIndexes(db: Db) {
   const c = collections(db);
   await Promise.all([
@@ -27,11 +21,11 @@ export async function ensureIndexes(db: Db) {
     c.products.createIndex({ tags: 1 }),
     // One active cart per session; converted carts stay as history.
     c.carts.createIndex(
-      { sessionId: 1 },
+      { shopperId: 1 },
       { unique: true, partialFilterExpression: { status: 'active' }, name: 'one_active_cart_per_session' },
     ),
     c.carts.createIndex({ status: 1, updatedAt: 1 }),
     c.coupons.createIndex({ code: 1 }, { unique: true }),
-    c.orders.createIndex({ sessionId: 1, createdAt: -1 }),
+    c.orders.createIndex({ shopperId: 1, createdAt: -1 }),
   ]);
 }

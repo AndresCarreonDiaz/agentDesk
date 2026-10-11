@@ -6,14 +6,17 @@ import { body, isForm } from './http';
 import { apiRouter } from './routes/api';
 import { pagesRouter } from './routes/pages';
 import { session } from './session';
+import { tap } from './tap';
 import { layout } from './views/layout';
 import { notFoundPage } from './views/pages';
 
 export interface AppOptions {
+  storeDb: Db; // host-site data: catalog, carts, orders
+  deskDb: Db; // AgentDesk memory (CONTRACT.md); the tap writes `requests` here
+  siteId: string;
   siteUrl: string;
-  // AgentDesk mounts its tap here: runs after the session is known, before store routes.
-  // Its own routes (/agent, /mcp, /.well-known/agentdesk) are reserved and unused by the store.
-  beforeRoutes?: RequestHandler[];
+  // The Door mounts its routes (/agent, /mcp, /.well-known/agentdesk) here, before the store's.
+  mountDesk?: (app: Express) => void;
 }
 
 // HTML forms can only POST; a hidden _method field turns them into PATCH/DELETE
@@ -50,15 +53,15 @@ const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   res.status(status).json({ error: code, message });
 };
 
-export function createApp(db: Db, opts: AppOptions): Express {
-  const c = collections(db);
+export function createApp(opts: AppOptions): Express {
+  const c = collections(opts.storeDb);
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', true);
 
   app.get('/health', async (_req, res) => {
     try {
-      await db.command({ ping: 1 });
+      await opts.storeDb.command({ ping: 1 });
       res.json({ ok: true, mongo: true });
     } catch {
       res.status(503).json({ ok: false, mongo: false });
@@ -69,9 +72,10 @@ export function createApp(db: Db, opts: AppOptions): Express {
   app.use(express.urlencoded({ extended: false, limit: '32kb' }));
   app.use(formMethodOverride);
   app.use(session());
-  for (const mw of opts.beforeRoutes ?? []) app.use(mw);
+  app.use(tap(opts.deskDb, opts.siteId));
+  opts.mountDesk?.(app);
 
-  app.use(apiRouter(c));
+  app.use(apiRouter(c, opts.storeDb.client));
   app.use(pagesRouter(c, opts.siteUrl));
 
   app.use((req, _res, next) => next(new HttpError(404, 'not_found', `No route for ${req.method} ${req.path}.`)));

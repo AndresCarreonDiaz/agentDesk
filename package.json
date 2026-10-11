@@ -1,17 +1,18 @@
 {
-  "name": "harbor-goods",
+  "name": "agentdesk",
   "version": "0.1.0",
   "private": true,
-  "description": "Harbor Goods: the demo store AgentDesk learns from. All data in MongoDB Atlas.",
+  "description": "AgentDesk: a front desk for AI agents that learns from every visit. Includes the Harbor Goods demo store.",
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
-    "seed": "tsx src/seed.ts",
-    "test": "tsx --test test/*.test.ts",
+    "dev": "tsx watch src/store/index.ts",
+    "dev:local": "tsx src/store/dev-local.ts",
+    "start": "tsx src/store/index.ts",
+    "seed": "tsx src/store/seed.ts",
+    "test": "tsx --test src/**/test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

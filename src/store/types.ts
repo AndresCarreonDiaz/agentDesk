@@ -54,7 +54,7 @@ export interface AppliedCoupon {
 
 export interface CartDoc {
   _id: string;
-  sessionId: string;
+  shopperId: string;
   status: 'active' | 'converted';
   items: CartLine[];
   coupon: AppliedCoupon | null;
@@ -84,7 +84,7 @@ export interface Shipping {
 
 export interface OrderDoc {
   _id: string;
-  sessionId: string;
+  shopperId: string;
   cartId: string;
   status: 'paid';
   items: Omit<CartLine, 'productId' | 'imageUrl'>[];

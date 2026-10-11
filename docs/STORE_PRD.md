@@ -40,7 +40,7 @@ Investigation (MongoDB retail ODL, official cart/inventory use cases, Shopify/UC
    - Cart = **one document**, line items embedded, **price/name/sku snapshotted** at add-to-cart.
    - Order = **immutable snapshot** of lines, totals, shipping, payment. Never re-read live product prices for history.
    - Inventory = **one document per SKU**, `_id = sku`, atomic `$inc` with `available: { $gte: qty }` so we cannot oversell.
-3. **Guest session, not user accounts.** Cookie `harbor_sid` on every store request. AgentDesk tap stores the same id on `requests`. Playwright fallback and desk episode can be tied together.
+3. **Guest session, not user accounts.** Humans get a `harbor_sid` cookie. During an agent visit the cart belongs to the AgentDesk session (`x-agentdesk-session` header or `agentdesk_session` cookie, CONTRACT.md section 2), so the Playwright fallback, the Door's capability calls and the tapped `requests` all share one id.
 4. **HTML that works without a SPA hydration race.** Server-rendered pages (or SSR) so a crawler and Playwright can click “Add to cart” on the blue mug without waiting on a client bundle.
 5. **Machine-readable doors on the origin.** Store serves crawlable HTML, `/sitemap.xml`, and a stub `/llms.txt`. AgentDesk middleware owns `/.well-known/agentdesk`, `POST /agent`, and `/mcp`. Do not pre-document tools in the store; the desk starts empty.
 6. **Money in integer cents**, currency `USD`. Fake payment token only.
@@ -77,7 +77,8 @@ Architecture already says TypeScript + Node. Modelence Cloud runs a Node 18+ ser
 - Catalog of 6 products, including color variants on the mug.
 - Product list, product detail, cart, checkout, order confirmation.
 - REST under `/api` **and** HTML forms that hit the **same** handlers (so tap sees one shape).
-- Guest cart via `harbor_sid`.
+- Guest cart: AgentDesk session during agent visits, `harbor_sid` for humans.
+- The tap: every host-app request recorded into `desk.requests` (CONTRACT.md section 3).
 - Coupon `WELCOME10` (10% off subtotal).
 - Fake checkout that writes an `orders` document and marks the cart `converted`.
 - Seed script into Atlas.
@@ -97,10 +98,10 @@ The store is done when the AgentDesk track can run DEMO.md visits 1–2 against 
 
 1. Open `/` — “Harbor Goods” and at least one mug visible in HTML.
 2. Open `/products/harbor-mug` — Blue variant selectable; Add to cart works.
-3. `POST /api/cart/items` with `{ "sku": "MUG-BLUE", "qty": 1 }` returns 200 and persists in Atlas `carts`.
+3. `POST /api/cart/items` with `{ "sku": "MUG-BLUE", "qty": 1 }` returns 201 and persists in Atlas `carts`.
 4. Checkout creates an `orders` document.
 5. `POST /api/cart/coupon` with `{ "code": "WELCOME10" }` changes totals.
-6. Every request above is a normal HTTP call the tap can log (method, path, JSON body, status, `harbor_sid`).
+6. Every request above lands in `desk.requests` with the AgentDesk `sessionId`, `bodyShape` and status.
 
 ---
 
@@ -179,7 +180,7 @@ HTML forms POST to the same `/api/*` routes (or the server maps `/cart/items` �
 4. Checkout + orders.
 5. Coupon.
 6. sitemap + llms.txt + policies.
-7. Hand to AgentDesk track for tap on `requests`.
+7. Tap writes `requests`. Hand off to Loop (AGENTS.md hand-off 2).
 
 Cut if late: coupon UI (keep API), policies page, search query (keep full list). **Never cut:** blue mug PDP, `POST /cart/items`, Atlas persistence, fake checkout.
 
@@ -195,7 +196,7 @@ Source: the Cerebral Valley participant guide for the Harness Engineering & Mode
 |---|---|
 | Finalists must build on the **MongoDB Atlas Sandbox** from the hackathon email | All `harbor` data lives in that sandbox cluster. `MONGODB_URI` is required, and there is no fallback to another database (local, Modelence-provisioned, or a personal cluster). |
 | Repository must be **public** | Store code ships in this repo. Secrets stay in `.env` (gitignored). Run `./scripts/setup-hooks.sh` with `gitleaks` before committing. |
-| **New work only**, contributions clearly identifiable | Store is written from scratch today in `apps/store/`. Git history shows it. Product images are our own SVG placeholders, not stock photos. Product names and copy are invented. |
+| **New work only**, contributions clearly identifiable | Store is written from scratch today in `src/store/`. Git history shows it. Product images are our own SVG placeholders, not stock photos. Product names and copy are invented. |
 | No code, data or assets we lack rights to | Only npm packages under permissive licenses. No scraped catalogs, brand names or logos. |
 | Banned: "a dashboard is the main feature" | The store is a shopfront and the developer panel is a supporting view. The pitch centres on the harness learning (Problem Statement 1, Recursive Harnessing). |
 | Demo only shows what we built | In the demo and 1-minute video, the store is framed as the **host site we built today** for the harness to learn. It is not presented as the product. |

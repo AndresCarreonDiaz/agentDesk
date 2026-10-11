@@ -1,12 +1,13 @@
 import { Router, type Request, type Response } from 'express';
+import type { MongoClient } from 'mongodb';
 import type { Collections } from '../db';
 import { body, isForm, parseQty, requireString } from '../http';
-import { sessionId } from '../session';
+import { shopperId } from '../session';
 import * as store from '../store';
 import type { CartDoc } from '../types';
 
 function cartJson(cart: CartDoc) {
-  const { _id, sessionId: _sid, ...rest } = cart;
+  const { _id, shopperId: _sid, ...rest } = cart;
   return { id: _id || null, ...rest };
 }
 
@@ -17,7 +18,7 @@ function reply(req: Request, res: Response, redirectTo: string, json: unknown, s
   return res.status(status).json(json);
 }
 
-export function apiRouter(c: Collections) {
+export function apiRouter(c: Collections, client: MongoClient) {
   const r = Router();
 
   r.get('/api/products', async (req, res) => {
@@ -30,7 +31,7 @@ export function apiRouter(c: Collections) {
   });
 
   r.get('/api/cart', async (_req, res) => {
-    const sid = sessionId(res);
+    const sid = shopperId(res);
     const cart = (await store.findActiveCart(c, sid)) ?? store.emptyCartView(sid);
     res.json({ cart: cartJson(cart) });
   });
@@ -40,29 +41,29 @@ export function apiRouter(c: Collections) {
     const b = body(req);
     const sku = requireString(b.sku, 'sku');
     const qty = parseQty(b.qty, { min: 1, fallback: 1 });
-    const cart = await store.addItem(c, sessionId(res), sku, qty);
-    reply(req, res, '/cart', { cart: cartJson(cart) });
+    const cart = await store.addItem(c, shopperId(res), sku, qty);
+    reply(req, res, '/cart', { cart: cartJson(cart) }, 201);
   });
 
   r.patch('/api/cart/items/:sku', async (req, res) => {
     const qty = parseQty(body(req).qty, { min: 0 });
-    const cart = await store.setItemQty(c, sessionId(res), req.params.sku, qty);
+    const cart = await store.setItemQty(c, shopperId(res), req.params.sku, qty);
     reply(req, res, '/cart', { cart: cartJson(cart) });
   });
 
   r.delete('/api/cart/items/:sku', async (req, res) => {
-    const cart = await store.setItemQty(c, sessionId(res), req.params.sku, 0);
+    const cart = await store.setItemQty(c, shopperId(res), req.params.sku, 0);
     reply(req, res, '/cart', { cart: cartJson(cart) });
   });
 
   r.post('/api/cart/coupon', async (req, res) => {
     const code = requireString(body(req).code, 'code');
-    const cart = await store.applyCoupon(c, sessionId(res), code);
+    const cart = await store.applyCoupon(c, shopperId(res), code);
     reply(req, res, '/cart', { cart: cartJson(cart) });
   });
 
   r.delete('/api/cart/coupon', async (req, res) => {
-    const cart = await store.removeCoupon(c, sessionId(res));
+    const cart = await store.removeCoupon(c, shopperId(res));
     reply(req, res, '/cart', { cart: cartJson(cart) });
   });
 
@@ -78,13 +79,13 @@ export function apiRouter(c: Collections) {
           shipping: (b.shipping ?? {}) as store.CheckoutInput['shipping'],
           payment: (b.payment ?? {}) as store.CheckoutInput['payment'],
         };
-    const order = await store.checkout(c, sessionId(res), input);
-    const { _id, sessionId: _sid, cartId: _cart, ...rest } = order;
+    const order = await store.checkout(c, client, shopperId(res), input);
+    const { _id, shopperId: _sid, cartId: _cart, ...rest } = order;
     reply(req, res, `/orders/${_id}`, { order: { id: _id, ...rest } }, 201);
   });
 
   r.get('/api/orders/:id', async (req, res) => {
-    const { _id, sessionId: _sid, cartId: _cart, ...rest } = await store.getOrder(c, sessionId(res), req.params.id);
+    const { _id, shopperId: _sid, cartId: _cart, ...rest } = await store.getOrder(c, shopperId(res), req.params.id);
     res.json({ order: { id: _id, ...rest } });
   });
 

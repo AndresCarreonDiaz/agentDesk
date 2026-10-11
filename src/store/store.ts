@@ -1,4 +1,4 @@
-import { MongoServerError } from 'mongodb';
+import { MongoServerError, type MongoClient } from 'mongodb';
 import type { Collections } from './db';
 import { HttpError } from './errors';
 import { newId } from './ids';
@@ -45,10 +45,13 @@ async function withStock(c: Collections, products: ProductDoc[]): Promise<Public
 export async function listProducts(c: Collections, q?: string, featuredOnly = false): Promise<PublicProduct[]> {
   const filter: Record<string, unknown> = { active: true };
   if (featuredOnly) filter.featured = true;
-  const query = q?.trim();
-  if (query) {
-    const re = new RegExp(escapeRegex(query), 'i');
-    filter.$or = [{ name: re }, { tags: re }, { 'variants.color': re }, { 'variants.sku': re }, { category: re }];
+  // Every word must match somewhere, so "blue mug" finds the Harbor Mug's blue variant.
+  const words = (q ?? '').toLowerCase().match(/[a-z0-9-]+/g) ?? [];
+  if (words.length) {
+    filter.$and = words.map((w) => {
+      const re = new RegExp(escapeRegex(w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w), 'i');
+      return { $or: [{ name: re }, { tags: re }, { category: re }, { 'variants.color': re }, { 'variants.label': re }, { 'variants.sku': re }] };
+    });
   }
   const products = await c.products.find(filter).sort({ featured: -1, name: 1 }).toArray();
   return withStock(c, products);
@@ -76,11 +79,11 @@ async function release(c: Collections, sku: string, qty: number) {
 
 // ---- cart ----
 
-export function emptyCartView(sessionId: string): CartDoc {
+export function emptyCartView(shopperId: string): CartDoc {
   const now = new Date();
   return {
     _id: '',
-    sessionId,
+    shopperId,
     status: 'active',
     items: [],
     coupon: null,
@@ -90,15 +93,15 @@ export function emptyCartView(sessionId: string): CartDoc {
   };
 }
 
-export async function findActiveCart(c: Collections, sessionId: string) {
-  return c.carts.findOne({ sessionId, status: 'active' });
+export async function findActiveCart(c: Collections, shopperId: string) {
+  return c.carts.findOne({ shopperId, status: 'active' });
 }
 
-async function getOrCreateCart(c: Collections, sessionId: string): Promise<CartDoc> {
+async function getOrCreateCart(c: Collections, shopperId: string): Promise<CartDoc> {
   const now = new Date();
   const upsert = () =>
     c.carts.findOneAndUpdate(
-      { sessionId, status: 'active' },
+      { shopperId, status: 'active' },
       {
         $setOnInsert: {
           _id: newId('cart'),
@@ -135,9 +138,9 @@ async function findVariant(c: Collections, sku: string): Promise<{ product: Prod
   return { product, variant };
 }
 
-export async function addItem(c: Collections, sessionId: string, sku: string, qty: number): Promise<CartDoc> {
+export async function addItem(c: Collections, shopperId: string, sku: string, qty: number): Promise<CartDoc> {
   const { product, variant } = await findVariant(c, sku);
-  const cart = await getOrCreateCart(c, sessionId);
+  const cart = await getOrCreateCart(c, shopperId);
   await reserve(c, sku, qty);
 
   const now = new Date();
@@ -168,8 +171,8 @@ export async function addItem(c: Collections, sessionId: string, sku: string, qt
   return recalc(c, cart._id);
 }
 
-export async function setItemQty(c: Collections, sessionId: string, sku: string, qty: number): Promise<CartDoc> {
-  const cart = await findActiveCart(c, sessionId);
+export async function setItemQty(c: Collections, shopperId: string, sku: string, qty: number): Promise<CartDoc> {
+  const cart = await findActiveCart(c, shopperId);
   const line = cart?.items.find((l) => l.sku === sku);
   if (!cart || !line) throw new HttpError(404, 'not_found', `${sku} is not in the cart.`);
 
@@ -190,11 +193,11 @@ export async function setItemQty(c: Collections, sessionId: string, sku: string,
   return recalc(c, cart._id);
 }
 
-export async function applyCoupon(c: Collections, sessionId: string, rawCode: string): Promise<CartDoc> {
+export async function applyCoupon(c: Collections, shopperId: string, rawCode: string): Promise<CartDoc> {
   const code = rawCode.trim().toUpperCase();
   const coupon = code ? await c.coupons.findOne({ _id: code, active: true }) : null;
   if (!coupon) throw new HttpError(400, 'invalid_coupon', `Coupon "${rawCode}" is not valid.`);
-  const cart = await getOrCreateCart(c, sessionId);
+  const cart = await getOrCreateCart(c, shopperId);
   await c.carts.updateOne(
     { _id: cart._id },
     { $set: { coupon: { code: coupon.code, percentOff: coupon.percentOff }, updatedAt: new Date() } },
@@ -202,9 +205,9 @@ export async function applyCoupon(c: Collections, sessionId: string, rawCode: st
   return recalc(c, cart._id);
 }
 
-export async function removeCoupon(c: Collections, sessionId: string): Promise<CartDoc> {
-  const cart = await findActiveCart(c, sessionId);
-  if (!cart) return emptyCartView(sessionId);
+export async function removeCoupon(c: Collections, shopperId: string): Promise<CartDoc> {
+  const cart = await findActiveCart(c, shopperId);
+  if (!cart) return emptyCartView(shopperId);
   await c.carts.updateOne({ _id: cart._id }, { $set: { coupon: null, updatedAt: new Date() } });
   return recalc(c, cart._id);
 }
@@ -218,7 +221,12 @@ export interface CheckoutInput {
   payment: { method?: unknown; last4?: unknown };
 }
 
-export async function checkout(c: Collections, sessionId: string, input: CheckoutInput): Promise<OrderDoc> {
+export async function checkout(
+  c: Collections,
+  client: MongoClient,
+  shopperId: string,
+  input: CheckoutInput,
+): Promise<OrderDoc> {
   const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
   const shipping: Shipping = {
     name: str(input.shipping.name),
@@ -238,46 +246,55 @@ export async function checkout(c: Collections, sessionId: string, input: Checkou
   }
   const last4 = str(input.payment.last4).replace(/\D/g, '').slice(-4) || '4242';
 
-  // Flip the cart first: this is the one atomic step that stops a double checkout.
+  // One transaction: the cart flips to converted (which also blocks a double checkout),
+  // reserved stock becomes sold, and the order snapshot is written, all or nothing.
   const orderId = newId('ord', 5);
-  const cart = await c.carts.findOneAndUpdate(
-    { sessionId, status: 'active', 'items.0': { $exists: true } },
-    { $set: { status: 'converted', orderId, updatedAt: new Date() } },
-    { returnDocument: 'after' },
-  );
-  if (!cart) throw new HttpError(400, 'empty_cart', 'The cart is empty.');
+  const session = client.startSession();
+  try {
+    return await session.withTransaction(async () => {
+      const cart = await c.carts.findOneAndUpdate(
+        { shopperId, status: 'active', 'items.0': { $exists: true } },
+        { $set: { status: 'converted', orderId, updatedAt: new Date() } },
+        { returnDocument: 'after', session },
+      );
+      if (!cart) throw new HttpError(400, 'empty_cart', 'The cart is empty.');
 
-  await c.inventory.bulkWrite(
-    cart.items.map((l) => ({
-      updateOne: { filter: { _id: l.sku }, update: { $inc: { reserved: -l.qty, sold: l.qty } } },
-    })),
-  );
+      await c.inventory.bulkWrite(
+        cart.items.map((l) => ({
+          updateOne: { filter: { _id: l.sku }, update: { $inc: { reserved: -l.qty, sold: l.qty } } },
+        })),
+        { session },
+      );
 
-  const order: OrderDoc = {
-    _id: orderId,
-    sessionId,
-    cartId: cart._id,
-    status: 'paid',
-    items: cart.items.map(({ sku, slug, name, variantLabel, qty, unitPriceCents }) => ({
-      sku,
-      slug,
-      name,
-      variantLabel,
-      qty,
-      unitPriceCents,
-    })),
-    summary: computeSummary(cart.items, cart.coupon),
-    couponCode: cart.coupon?.code ?? null,
-    shipping,
-    payment: { method: 'demo', last4, transactionId: newId('demo') },
-    createdAt: new Date(),
-  };
-  await c.orders.insertOne(order);
-  return order;
+      const order: OrderDoc = {
+        _id: orderId,
+        shopperId,
+        cartId: cart._id,
+        status: 'paid',
+        items: cart.items.map(({ sku, slug, name, variantLabel, qty, unitPriceCents }) => ({
+          sku,
+          slug,
+          name,
+          variantLabel,
+          qty,
+          unitPriceCents,
+        })),
+        summary: computeSummary(cart.items, cart.coupon),
+        couponCode: cart.coupon?.code ?? null,
+        shipping,
+        payment: { method: 'demo', last4, transactionId: newId('demo') },
+        createdAt: new Date(),
+      };
+      await c.orders.insertOne(order, { session });
+      return order;
+    });
+  } finally {
+    await session.endSession();
+  }
 }
 
-export async function getOrder(c: Collections, sessionId: string, id: string): Promise<OrderDoc> {
-  const order = await c.orders.findOne({ _id: id, sessionId });
+export async function getOrder(c: Collections, shopperId: string, id: string): Promise<OrderDoc> {
+  const order = await c.orders.findOne({ _id: id, shopperId });
   if (!order) throw new HttpError(404, 'not_found', 'Order not found.');
   return order;
 }

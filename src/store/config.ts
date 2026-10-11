@@ -1,4 +1,4 @@
-// Loads apps/store/.env when present. Only MONGODB_URI is accepted: falling back to
+// Loads .env from the repo root when present. Only MONGODB_URI is accepted: falling back to
 // a host-injected MONGO_URL would move data off the hackathon Atlas Sandbox.
 try {
   process.loadEnvFile();
@@ -8,7 +8,8 @@ try {
 
 export interface Config {
   mongoUri: string;
-  dbName: string;
+  storeDb: string;
+  siteId: string;
   port: number;
   siteUrl: string;
 }
@@ -21,7 +22,8 @@ export function loadConfig(): Config {
   const port = Number(process.env.PORT ?? 3000);
   return {
     mongoUri,
-    dbName: process.env.MONGODB_DB_STORE ?? 'harbor',
+    storeDb: process.env.MONGODB_DB_STORE ?? 'harbor',
+    siteId: process.env.SITE_ID ?? 'demo-store',
     port,
     siteUrl: (process.env.SITE_URL ?? `http://localhost:${port}`).replace(/\/$/, ''),
   };

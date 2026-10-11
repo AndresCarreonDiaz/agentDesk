@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import { seedProducts } from '../catalog';
 import type { Collections } from '../db';
-import { sessionId } from '../session';
+import { shopperId } from '../session';
 import * as store from '../store';
 import { layout, STORE_NAME, STORE_TAGLINE, type LayoutOptions } from '../views/layout';
 import * as views from '../views/pages';
@@ -19,7 +19,7 @@ export function pagesRouter(c: Collections, siteUrl: string) {
   const r = Router();
 
   async function send(res: Response, opts: Omit<LayoutOptions, 'cartCount' | 'error'>, content: Raw, status = 200) {
-    const cart = await store.findActiveCart(c, sessionId(res));
+    const cart = await store.findActiveCart(c, shopperId(res));
     const cartCount = cart?.items.reduce((n, l) => n + l.qty, 0) ?? 0;
     const error = typeof res.req.query.error === 'string' ? res.req.query.error : undefined;
     res.status(status).type('html').send(layout({ ...opts, cartCount, error }, content));
@@ -42,19 +42,19 @@ export function pagesRouter(c: Collections, siteUrl: string) {
   });
 
   r.get('/cart', async (_req, res) => {
-    const sid = sessionId(res);
+    const sid = shopperId(res);
     const cart = (await store.findActiveCart(c, sid)) ?? store.emptyCartView(sid);
     await send(res, { title: 'Cart' }, views.cartPage(cart));
   });
 
   r.get('/checkout', async (_req, res) => {
-    const sid = sessionId(res);
+    const sid = shopperId(res);
     const cart = (await store.findActiveCart(c, sid)) ?? store.emptyCartView(sid);
     await send(res, { title: 'Checkout' }, views.checkoutPage(cart));
   });
 
   r.get('/orders/:id', async (req, res) => {
-    const order = await store.getOrder(c, sessionId(res), req.params.id);
+    const order = await store.getOrder(c, shopperId(res), req.params.id);
     await send(res, { title: `Order ${order._id}` }, views.orderPage(order));
   });
 
