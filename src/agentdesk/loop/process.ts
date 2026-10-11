@@ -166,6 +166,7 @@ export async function processEpisode(ctx: AgentDeskContext, episodeId: string): 
     },
   );
 
+  const siteRequests = sessionRequests.filter((r) => r.source === "fallback").length;
   const raindrop: RaindropStatus = firstPass
     ? await sendVisitEvent(ctx, {
         episodeId,
@@ -179,10 +180,12 @@ export async function processEpisode(ctx: AgentDeskContext, episodeId: string): 
         durationMs: close.durationMs,
         capabilities: called.map((c) => c.name),
         failureKind: failure,
+        siteRequests,
+        usedLearnedAction: sessionRequests.some((r) => r.source === "capability" && r.status < 300),
       })
     : "skipped";
   const signalList = [...signals];
-  if (signalList.length > 0) await sendSignals(ctx, episodeId, signalList);
+  if (signalList.length > 0) await sendSignals(ctx, episodeId, signalList, siteRequests);
 
   return {
     closed: true,
