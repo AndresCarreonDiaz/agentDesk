@@ -66,6 +66,7 @@ Live: the Loop is wired to real data (CONTRACT sections 3 to 6).
 - Repeated failing writes become `proposed` `require_review` rules, once per route.
 - Raindrop: one event per processed episode (Order step 8 basics). Experiments are not built.
 - Metrics: `loopMetrics` gives the learning curve and failures before the first success (Order step 7).
+- Site reading: when a visit ends with `unknown_site` (or the agent says the desk could not tell what the site offers) and the site has no `site_read` knowledge, `readSite` fetches `/`, up to 6 same-origin links, `/llms.txt` and `/sitemap.xml` (GET only, `AGENTDESK_SITE_URL` or `localhost:$PORT`), and writes 3 to 10 `site_read` facts once per site.
 - Not built: capability repair from the diff (`inputSchema` or `mappedRequests` edits), the optional `agentdesk({ success })` oracle, the reflector playbook (Order step 9).
 - Known overlap: Door already counts `stats.calls` when `do` runs a capability; the Loop adds one call per processed episode on top, with `successes` judged by `siteSuccess`.
 
