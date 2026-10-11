@@ -1,5 +1,6 @@
 // Wipes what a desk has learned, so it behaves like a fresh install, without touching its setup.
-// Deletes visits, tapped requests, facts, actions, intents, rules, feedback and the audit log.
+// Deletes visits, tapped requests, facts, actions, intents, rules, feedback, the audit log and the Loop's
+// playbook versions (the panel's teaching history).
 // Keeps settings (embedding lock, panel token, autopilot) and every index, so the running app keeps working.
 //
 //   AGENTDESK_DB=agentdesk npm run reset:desk -- --yes
@@ -15,7 +16,8 @@ if (!process.argv.includes("--yes")) {
   process.exit(1);
 }
 
-const LEARNED = Object.values(COLLECTIONS).filter((name) => name !== COLLECTIONS.settings);
+// "playbooks" belongs to the Loop (loop/playbook.ts) and is not in COLLECTIONS; with none left it falls back to the default.
+const LEARNED = [...Object.values(COLLECTIONS).filter((name) => name !== COLLECTIONS.settings), "playbooks"];
 const { client, db } = await connect({ mongoUri: process.env.MONGODB_URI!, dbName });
 const settings = await db.collection(COLLECTIONS.settings).findOne({}, { projection: { siteId: 1 } });
 if (!settings) {
