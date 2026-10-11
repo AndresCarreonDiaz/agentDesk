@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { AgentDeskContext } from "../contract/context.js";
 import { createAgentRouter } from "./agent-route.js";
+import { createMcpRouter } from "./mcp.js";
 import { SESSION_HEADER } from "./sessions.js";
 import { createTap } from "./tap.js";
 import { LIST_ACTIONS_HINT, TOOL_NAMES } from "./tools.js";
@@ -31,5 +32,6 @@ export function createDoorRouter(ctx: AgentDeskContext): Router {
   });
 
   router.use("/agent", createAgentRouter(ctx));
+  router.use("/mcp", createMcpRouter(ctx));
   return router;
 }
