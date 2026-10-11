@@ -86,6 +86,10 @@ export function pagesRouter(c: Collections, siteUrl: string) {
       );
   });
 
+  r.get('/robots.txt', (_req, res) => {
+    res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: ${siteUrl}/sitemap.xml\n`);
+  });
+
   // Store facts only. No API or tool list: AgentDesk has to learn those from traffic.
   r.get('/llms.txt', async (_req, res) => {
     const products = await store.listProducts(c);

@@ -6,6 +6,7 @@ export type ErrorCode =
   | 'empty_cart'
   | 'invalid_shipping'
   | 'already_ordered'
+  | 'payload_too_large'
   | 'conflict';
 
 export class HttpError extends Error {
