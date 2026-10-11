@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Pre-commit gate: block secrets and files that must not be public.
+# Enable once per clone: ./scripts/setup-hooks.sh
+set -euo pipefail
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+# 1. Block sensitive file types by name.
+blocked=$(printf '%s\n' "$staged" | grep -Ei \
+  '(^|/)\.env($|\.)|\.pem$|\.key$|\.p12$|\.pfx$|\.jks$|\.keystore$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|\.tfstate$|(^|/)credentials\.json$|service[-_]account.*\.json$|\.sqlite3?$|\.db$' \
+  | grep -Evi '\.env\.example$|\.env\.sample$' || true)
+if [ -n "$blocked" ]; then
+  echo "pre-commit: blocked files that must not be public:" >&2
+  printf '  %s\n' $blocked >&2
+  echo "Unstage them (git restore --staged <file>) and add them to .gitignore." >&2
+  exit 1
+fi
+
+# 2. Scan staged content for secrets with gitleaks.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks is not installed. Install it: brew install gitleaks" >&2
+  exit 1
+fi
+gitleaks git --staged --redact --no-banner --exit-code 1 . || {
+  echo "pre-commit: possible secret found. Remove it before you commit." >&2
+  echo "If it is a false positive, add its fingerprint to .gitleaksignore." >&2
+  exit 1
+}
