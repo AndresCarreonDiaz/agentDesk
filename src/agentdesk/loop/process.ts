@@ -22,6 +22,7 @@ import {
 } from "./core.js";
 import { describeChanges, embedOrEmpty, lessonFromChanges, nameCapability, withTimeout } from "./naming.js";
 import { sendVisitEvent, type RaindropStatus } from "./raindrop.js";
+import { readSite } from "./siteread.js";
 
 // The reflector for one episode (docs/parts/loop.md). The pure decisions live in core.ts;
 // this file loads the data, calls the core, and writes the results. Safe to run twice.
@@ -45,6 +46,9 @@ const MAX_EXAMPLES = 5;
 // but nothing ran, so it is not a call.
 const NOT_EXECUTED = /needs the site owner's approval|has blocked|does not allow agents|There is no action named|needs: /i;
 const DESK_DOES_NOT_KNOW = /don'?t know|no actions learned|no action named/i;
+// The agent's own closing words when the empty desk could not say what the site offers.
+const DESK_COULD_NOT_TELL =
+  /(could ?n[o']?t|can ?not|can'?t|did ?n[o']?t|does ?n[o']?t|don'?t|do not|unable)[^.]{0,40}(tell|know|say|what (the |this )?(site|store|shop|website))/i;
 
 const ms = (t: Date | string): number => (t instanceof Date ? t.getTime() : new Date(t).getTime());
 const isWrite = (r: { method: string }): boolean => !READ_METHODS.has(r.method.toUpperCase());
@@ -111,10 +115,24 @@ export async function processEpisode(ctx: AgentDeskContext, episodeId: string): 
   // ---- reflection ----
   const failure = classify(episode, sessionRequests, called.length > 0);
   const previous = stored.reflection;
+
+  // ---- the desk could not say what the site offers: read the site once ----
+  let siteRead = 0;
+  if (failure === "unknown_site" || (episode.doneNote && DESK_COULD_NOT_TELL.test(episode.doneNote))) {
+    try {
+      const ids = await readSite(ctx);
+      siteRead = ids.length;
+      for (const id of ids) learned.push({ kind: "knowledge", id });
+    } catch (err) {
+      ctx.log.warn(`loop: site reading failed (${(err as Error).message})`);
+    }
+  }
+
   const merged = mergeLearned(previous?.learned ?? [], learned);
-  const why =
-    previous?.why ||
-    (await explain(ctx, episode, failure, sessionRequests, called, diff));
+  let why = previous?.why || (await explain(ctx, episode, failure, sessionRequests, called, diff));
+  if (siteRead > 0 && !previous?.why) {
+    why += ` The desk then read the site's pages and learned ${siteRead} fact${siteRead === 1 ? "" : "s"} about what it offers.`;
+  }
   const reflection: Reflection = { failure, why, diff: diff ?? previous?.diff ?? null, learned: merged };
 
   await ctx.cols.episodes.updateOne(
