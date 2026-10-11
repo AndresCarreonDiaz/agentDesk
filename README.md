@@ -43,14 +43,15 @@ Consumer agents like OpenAI's dots and Meta's Muse now shop, book and fill forms
 
 ## How it learns, visit by visit
 
-| Visit | What the agent wants | What AgentDesk knows | Outcome |
-|---|---|---|---|
-| 1 | "What can I do here?" | Nothing | Agent leaves. Desk logs an unanswered question and learns what the site offers. |
-| 2 | "What can I do here?" then "add the blue mug to my cart" | What the site does | Answer given. Cart fails, agent falls back to clicking the site. Desk watches the request that worked. |
-| 3 | "Add the blue mug to my cart" | `add_to_cart` capability, unverified | Works in one call. Capability marked verified. |
-| 10 | "Buy two mugs and ship to Austin" | Search, cart, checkout flow | Done in 3 calls, 5 seconds. |
+Agents only ever talk to the desk's MCP (or `POST /agent`). Proven live on the demo store, from an empty database:
 
-The numbers that prove it: **task success rate, steps per task and seconds per task, plotted against visit count.**
+| Visit | The agent asks | What the desk does | Result |
+|---|---|---|---|
+| 1 | "What can I do here?" "Add a blue mug to my cart." | Knows nothing yet: says so honestly. After the visit it **reads its own site** (`/llms.txt`, pages, forms) | Learns 6 facts about the store and 2 actions (`search_products`, `add_to_cart`) in about 20 s |
+| 2 | "What can I do here?" "Do you ship to Austin?" "Add a blue mug." | Answers from what it learned, offers `add_to_cart`, runs it on autopilot and writes it to the audit log | Mug in the cart **in one call (343 ms)**; `add_to_cart` becomes **verified** |
+| later | Something the desk still cannot do | Watches how it finally got done on the website (the tap), or the diff between a failure and a success, and learns from that too | More actions, lessons from failures, proposed guardrails |
+
+The numbers that prove it: **task success rate, steps per task and seconds per task, plotted against visit count.** Run it yourself: `npm run demo:mcp` against a store with AgentDesk on a fresh database.
 
 ## What is in this repo
 
