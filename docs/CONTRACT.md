@@ -6,18 +6,51 @@ Parts: **Store** ([parts/store.md](parts/store.md)), **Door** ([parts/door.md](p
 
 ## 1. Code layout
 
-One TypeScript app. Each part owns one folder. Shared types live in `src/contract/` and mirror this file.
+One TypeScript repo. Everything a developer installs lives in **one package, `src/agentdesk/`**: the tap, the door, the loop and the panel. The demo store is just a host that installs it with one line. Each part owns one folder. Shared types live in `src/agentdesk/contract/` and mirror this file.
 
 ```
 src/
-  contract/   types.ts (the documents below), db.ts (Atlas client + collection names)
-  store/      demo store, tap middleware, visitor agents, developer panel
-  door/       discovery, POST /agent, /mcp, desk brain, intent match, rule enforcement
-  loop/       episodes, reflector, capability stages, metrics, Raindrop
-fixtures/     hand-written documents for testing a part before the others are live
+  agentdesk/         THE DROP-IN PACKAGE (what developers install)
+    index.ts         agentdesk(): reads env, connects, bootstraps, mounts everything   (Door)
+    contract/        types.ts (the documents below), db.ts (Atlas client + names)      (shared)
+    door/            tap, discovery, POST /agent, /mcp, desk brain, intent match, rules (Door)
+    loop/            episode close, reflector, capability stages, metrics, Raindrop   (Loop)
+    panel/           developer panel, served at /agentdesk                             (Store)
+  store/             demo store that installs agentdesk with one line; visitor agents (Store)
+fixtures/            hand-written documents for testing a part before the others are live
 ```
 
-A part imports another part only through `src/contract/` or through HTTP. No reaching into another part's folder.
+A part imports another part only through `src/agentdesk/contract/` or through HTTP. No reaching into another part's folder. The one exception: each part's folder exports a single start function (for example `startLoop(ctx)`) that `agentdesk()` calls.
+
+### Install: what a developer does
+
+The whole point of the product. Installing must feel like a toggle.
+
+```
+npm i agentdesk
+```
+
+```
+# .env  (MONGODB_URI is usually there already: the site runs on MongoDB)
+MONGODB_URI=...          # the developer's own Atlas cluster (today: the hackathon sandbox)
+ANTHROPIC_API_KEY=...    # or OPENAI_API_KEY: the desk thinks with the developer's own LLM key
+VOYAGE_API_KEY=...       # embeddings for intent match (today; the goal is zero extra keys)
+```
+
+```ts
+app.use(agentdesk())
+```
+
+On first start, `agentdesk()`:
+
+1. Connects with `MONGODB_URI` and uses **its own database** `agentdesk` (override with `AGENTDESK_DB`). It never reads or writes the app's own collections.
+2. Creates the collections below and the Atlas Vector Search indexes if they are missing.
+3. Creates an admin token in `settings` and prints the panel link (`/agentdesk?token=...`) to the server log once.
+4. Mounts the tap, discovery, `/agent`, `/mcp` and the panel, and starts the Loop in the same process.
+
+All options are optional: `agentdesk({ db, siteId, panelPath })`. There is no AgentDesk account and no AgentDesk server: the desk's memory lives in the developer's own cluster, and its thinking runs on the developer's own LLM key.
+
+**While building today:** everyone uses the sandbox `MONGODB_URI` with their own `AGENTDESK_DB` (for example `agentdesk_ricardo`) so nobody overwrites anyone else. The demo uses `agentdesk`.
 
 ## 2. IDs and the session join
 
@@ -26,12 +59,13 @@ A part imports another part only through `src/contract/` or through HTTP. No rea
 - `episodeId`: one per `sessionId`, created by the Door at the same moment. `episodeId` and `sessionId` map one to one.
 - `requestId`: minted by the tap for every HTTP request it records.
 - These three IDs are the only join keys. Format: `ses_`, `ep_`, `req_` prefix plus a random id.
+- `siteId`: one install is one site. It comes from `agentdesk({ siteId })` or `AGENTDESK_SITE_ID`, and defaults to the database name. The second demo site uses its own database, so what one site learns never leaks into the other.
 
 ## 3. Collections
 
 All documents carry `siteId` (which host platform) and `createdAt`.
 
-### `requests` (written by Store's tap)
+### `requests` (written by the tap, part of Door, inside the package)
 
 ```ts
 {
@@ -64,6 +98,7 @@ All documents carry `siteId` (which host platform) and `createdAt`.
   requestIds: string[];                 // filled by Loop at close, from `requests`
   outcome: "open" | "success" | "abandoned" | "error" | "blocked";
   goalSuccess: boolean | null;          // reported by the visitor agent, see section 5
+  doneNote: string | null;              // the agent's own words at /agent/done ("I wanted X and couldn't")
   steps: number;                        // agent calls + fallback requests
   durationMs: number;
   reflection: {
@@ -74,7 +109,7 @@ All documents carry `siteId` (which host platform) and `createdAt`.
 }
 ```
 
-### `capabilities` (stages by Loop, approve/block by Store's panel, read by Door)
+### `capabilities` (stages by Loop, approve/block by the panel, read by Door)
 
 ```ts
 {
@@ -108,7 +143,7 @@ All documents carry `siteId` (which host platform) and `createdAt`.
 { name: string; examples: string[]; embedding: number[]; capabilityIds: string[] }
 ```
 
-### `rules` (written by Store's panel, enforced by Door)
+### `rules` (written by the panel, enforced by Door)
 
 ```ts
 { ruleId: string; text: string;       // "agents may not apply discount codes"
@@ -116,11 +151,17 @@ All documents carry `siteId` (which host platform) and `createdAt`.
   enabled: boolean }
 ```
 
-### `feedback` (written by Store's panel)
+### `feedback` (written by the panel)
 
 ```ts
 { feedbackId: string; type: "correction" | "approve" | "block";
   target: { collection: string; id: string }; text: string | null }
+```
+
+### `settings` (written by `agentdesk()` on first start)
+
+```ts
+{ _id: "settings"; siteId: string; adminTokenHash: string; installedAt: Date }
 ```
 
 ## 4. Capability lifecycle
@@ -135,7 +176,7 @@ observed -> proposed -> verified -> approved
 | `observed` | Loop | Seen in a successful fallback request. Not offered to agents. |
 | `proposed` | Loop | Offered to agents with a "new" note. |
 | `verified` | Loop | An episode with `goalSuccess: true` called it. An HTTP 200 alone does not count. Set `verifiedByEpisodeId`. |
-| `approved` / `blocked` | Store's panel | The developer's decision always wins. |
+| `approved` / `blocked` | Panel | The developer's decision always wins. |
 
 What the Door offers to agents:
 
@@ -146,19 +187,36 @@ What the Door offers to agents:
 
 Never offered: `observed`, `blocked`, or anything an enabled rule blocks.
 
+### How agents see capabilities: fixed tools, capabilities as data
+
+Agents always see the **same five tools**, on `/mcp` and on `POST /agent`. The tool list never changes. MCP clients cache the tool list and many ignore tool-list-changed, so a capability learned mid-visit would be invisible as a new tool. Learned capabilities come back as **data** from `list_actions` instead.
+
+| Tool | What it does |
+|---|---|
+| `about` | What this site is and what it offers, from `knowledge`. An empty desk says "I don't know yet" (and that gap is what the Loop learns from). |
+| `ask` | Answers a question from `knowledge`. Refuses to guess. |
+| `list_actions` | The capabilities offered right now (table above): `name`, `description`, `kind`, `inputSchema`, and a "new" note for `proposed`. |
+| `do` | `{ action, input }`: runs one offered capability by replaying its `mappedRequest` through the host app. Blocked, unapproved writes and rule matches are refused with the reason. |
+| `done` | `{ goalSuccess, note? }`: the agent says how the visit ended, in its own words. Same as `POST /agent/done`. |
+
 ## 5. Who writes what
 
-| Collection | Store | Door | Loop |
+The Store part owns the panel code (inside the package) and the demo store, which writes nothing to these collections: it only installs `agentdesk()`.
+
+| Collection | Door (incl. tap) | Loop | Panel |
 |---|---|---|---|
 | `requests` | writes (tap) | reads | reads |
-| `episodes` | reads | creates, appends turns | closes: `requestIds`, `outcome`, `steps`, `durationMs`, `reflection` |
-| `capabilities` | sets `approved` / `blocked` only | reads, increments `stats` | creates, sets other stages |
-| `knowledge` | writes corrections | reads | writes |
-| `intents` | reads | writes | reads |
-| `rules` | writes | reads, enforces | reads |
-| `feedback` | writes | – | reads |
+| `episodes` | creates, appends turns, saves `goalSuccess` and `doneNote` | closes: `requestIds`, `outcome`, `steps`, `durationMs`, `reflection` | reads |
+| `capabilities` | reads, increments `stats` | creates, sets other stages | sets `approved` / `blocked` only |
+| `knowledge` | reads | writes | writes corrections |
+| `intents` | writes | reads | reads |
+| `rules` | reads, enforces | reads | writes |
+| `feedback` | – | reads | writes |
+| `settings` | writes on first start | – | reads (admin token) |
 
-`goalSuccess`: the visitor agent reports it with `POST /agent/done {sessionId, goalSuccess}` (the Door saves it). The visitor agent never sets a capability stage.
+`goalSuccess`: the visitor agent reports it with the `done` tool or `POST /agent/done {sessionId, goalSuccess, note?}` (the Door saves it). The visitor agent never sets a capability stage.
+
+**When an episode closes:** on `done`, or after **60 seconds** with no agent call and no tapped request for that `sessionId`. A visit closed by the timeout gets `outcome: "abandoned"` and `goalSuccess: null`.
 
 ## 6. Honest learning curve
 
@@ -169,3 +227,4 @@ Never offered: `observed`, `blocked`, or anything an enabled rule blocks.
 ## Changelog
 
 - v1: first version.
+- v2: one drop-in package (`src/agentdesk/`) holds tap, door, loop and panel; the tap moves from Store to Door. Install = `MONGODB_URI` + LLM key + `app.use(agentdesk())`, with the desk's own `agentdesk` database and a `settings` collection. Five fixed agent tools with capabilities as data (no dynamic MCP tools). `doneNote` on episodes, 60 second abandon timeout, `siteId` defined.

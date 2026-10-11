@@ -12,17 +12,20 @@ AgentDesk is an empty agent you drop inside a platform, and it becomes that plat
 
 ## The drop-in
 
+It should feel like a toggle. The site already runs on MongoDB, so the developer adds one LLM key and one line:
+
 ```
-npm i agentdesk        # Express / Next.js middleware
-# or
-docker run agentdesk   # sidecar container in front of the app
+npm i agentdesk
+# .env: MONGODB_URI (already there), ANTHROPIC_API_KEY or OPENAI_API_KEY, VOYAGE_API_KEY
+app.use(agentdesk())
 ```
 
-Three lines of setup, then nothing else. Once installed, AgentDesk:
+Nothing else. AgentDesk keeps its memory in its own `agentdesk` database inside the developer's cluster and thinks with the developer's own LLM key: no AgentDesk account, no AgentDesk servers. Once installed, AgentDesk:
 
 1. Publishes a door so agents can find it: a discovery file at `/.well-known/agentdesk`, a link tag in the site's HTML, and an `llms.txt` entry.
-2. Serves two ways in: a plain chat endpoint (`POST /agent`) for any agent, and an MCP endpoint (`/mcp`) whose tool list grows as it learns.
+2. Serves two ways in: a plain chat endpoint (`POST /agent`) and an MCP endpoint (`/mcp`), both with the same five fixed tools (`about`, `ask`, `list_actions`, `do`, `done`). What it learns shows up inside `list_actions`, so agents never reconnect.
 3. Sits in the request path of the host app, so it can see which real requests succeed (read below).
+4. Serves the developer panel at `/agentdesk`, behind a private link printed once in the server log.
 
 It starts with **zero knowledge**. That is the point of the demo and the product: no setup cost.
 

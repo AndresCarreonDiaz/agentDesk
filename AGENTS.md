@@ -12,8 +12,10 @@ Background, when you need it: [CONCEPT](docs/CONCEPT.md), [ARCHITECTURE](docs/AR
 
 ## Rules
 
-- Work only in your part's folder (`src/store/`, `src/door/` or `src/loop/`). Talk to other parts only through `src/contract/` or HTTP.
-- Do not change `docs/CONTRACT.md` or `src/contract/` without the team agreeing. A contract change is its own commit with a changelog line.
+- Everything a developer installs lives in one package, `src/agentdesk/`. Installing must stay one line plus env keys (`MONGODB_URI`, an LLM key, `VOYAGE_API_KEY`): never add a setup step for the developer.
+- Work only in your part's folder: Door `src/agentdesk/index.ts` + `src/agentdesk/door/`, Loop `src/agentdesk/loop/`, Store `src/store/` + `src/agentdesk/panel/`. Talk to other parts only through `src/agentdesk/contract/` or HTTP.
+- Agents always see the same five tools (`about`, `ask`, `list_actions`, `do`, `done`). Never add a tool per capability; capabilities are data.
+- Do not change `docs/CONTRACT.md` or `src/agentdesk/contract/` without the team agreeing. A contract change is its own commit with a changelog line.
 - Until another part is live, test against `fixtures/`, not against a mock you invent.
 - When you reach a step in your part's Order, update its **Status** section, so the other parts know what is live.
 - This repo is public. Run `./scripts/setup-hooks.sh` once before your first commit. Never commit keys or `.env` files.
@@ -22,9 +24,9 @@ Background, when you need it: [CONCEPT](docs/CONCEPT.md), [ARCHITECTURE](docs/AR
 
 Each part follows the Order in its own doc. These hand-offs connect them:
 
-1. **All:** `src/contract/` types and Atlas connection. Atlas, Voyage and the vector index working is the first risk to clear.
-2. **Store → Loop:** the tap writes real `requests`. Loop switches from fixtures to real data.
-3. **Door → Store:** sessions and `/agent/done` work. Visitor agents run real visits.
+1. **All:** `src/agentdesk/contract/` types and Atlas connection. Atlas, Voyage and the vector index working is the first risk to clear.
+2. **Door → Loop:** `agentdesk()` boots and the tap writes real `requests`. Loop switches from fixtures to real data.
+3. **Door → Store:** the install line works in the demo store, sessions and `done` work. Visitor agents run real visits.
 4. **Loop → Door:** capabilities reach `proposed`. The Door offers them.
 5. **Loop → Store:** closed episodes and metrics. The panel goes live.
 6. **All:** deploy and run the full demo (DEMO.md).
