@@ -2,6 +2,14 @@
 
 **Drop it in. It knows nothing. Every agent that visits teaches it.**
 
+![How AgentDesk learns: website requests per visit go 4 → 1 → 0](docs/demo/learning-run.gif)
+
+*A real Gemini agent, same goal three times ("Add a blue mug to my cart"). Visit 1 works through the website and gets a 400, then a 201; the desk keeps the request the site accepted and turns it into an action. Visit 2 follows it. Visit 3 needs no website requests at all.* [Open the interactive version](https://htmlpreview.github.io/?https://github.com/AndresCarreonDiaz/agentDesk/blob/main/docs/demo/learning-run.html)
+
+**The live developer panel during a real run** (3 → 2 → 0 site requests, learned actions in blue, Gemini's actions in the corner):
+
+![AgentDesk developer panel during a live Gemini run](docs/demo/live-dashboard.png)
+
 AgentDesk is a front desk for AI agents. A developer drops it into any platform (an online store, an image generator, an insurance quote site) with one line. On day one it is empty: no docs, no tool list, no config. It just starts accepting agent traffic.
 
 ## Install (it should feel like a toggle)
