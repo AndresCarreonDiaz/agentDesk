@@ -19,7 +19,7 @@ describe("explorer", () => {
       if (req.system?.includes("learning about it")) return { facts: ["Harbor Goods sells desk goods: mugs, totes and notebooks.", "Ships anywhere in the US.", "Payments are simulated."] };
       const p = req.prompt ?? "";
       if (p.includes("POST /cart/items")) return { name: "add_to_cart", description: "Add a product to the cart." };
-      if (p.includes("GET /products")) return { name: "search_products", description: "Search the catalog." };
+      if (p.includes("GET /products") || p.includes("GET /api/products")) return { name: "search_products", description: "Search the catalog." };
       if (p.includes("/api/checkout")) return { name: "checkout", description: "Place the order." };
       return { name: "do_something", description: "Something." };
     },
@@ -36,6 +36,7 @@ describe("explorer", () => {
     app.get("/products/other", (_q, res) => { res.send(html("Other", `<form action="/cart/items" method="post"><input type="hidden" name="sku" value="TOTE"><input name="qty" type="number" value="1"><button>Add to cart</button></form>`)); });
     app.get("/checkout", (_q, res) => { res.send(html("Checkout", `<form action="/api/checkout" method="post"><input name="name"><input name="cardNumber"><button>Pay</button></form>`)); });
     app.get("/policies", (_q, res) => { res.send(html("Policies", "<p>Returns within 30 days.</p>")); });
+    app.get("/api/products", (_q, res) => { res.json({ products: [{ name: "Harbor Mug", variants: [{ sku: "MUG-BLUE" }] }] }); });
     app.get("/sitemap.xml", (_q, res) => { res.type("application/xml").send("<urlset><url><loc>/products/other</loc></url></urlset>"); });
     const server = app.listen(0);
     await new Promise((r) => server.once("listening", r));
@@ -80,7 +81,8 @@ describe("explorer", () => {
       inputSchema: { properties: { sku: { type: "string" }, qty: { type: "number" } }, required: ["sku", "qty"] },
       examples: [{ input: { sku: "MUG-BLUE", qty: 1 } }],
     });
-    expect(byName.search_products).toMatchObject({ kind: "read", mappedRequests: [{ method: "GET", path: "/products" }] });
+    // The search form's JSON twin is preferred: agents get SKUs, not a page of HTML.
+    expect(byName.search_products).toMatchObject({ kind: "read", mappedRequests: [{ method: "GET", path: "/api/products" }] });
     // On autopilot the cart goes live; checkout moves money, so it still waits for the developer.
     expect(isOffered(byName.add_to_cart, { autopilot: true })).toBe(true);
     expect(isOffered(byName.checkout, { autopilot: true })).toBe(false);

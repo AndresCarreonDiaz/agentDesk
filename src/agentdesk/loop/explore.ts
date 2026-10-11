@@ -69,8 +69,10 @@ export async function exploreSite(ctx: AgentDeskContext, base: string, episodeId
   const htmlPages = [home, ...(await Promise.all(pages.map((p) => read(base, p))))].filter((p): p is Page => Boolean(p && p.html));
   const forms = dedupeForms(htmlPages.flatMap((p) => formsOf(base, p)));
   const known = await ctx.cols.capabilities.find({ siteId: ctx.config.siteId }, { projection: { embedding: 0 } }).toArray();
-  for (const form of forms) {
-    if (known.some((c) => c.mappedRequests.some((m) => m.method === form.method && samePath(m.path, form.path)))) continue;
+  for (const found of forms) {
+    // A search form often has a JSON twin (/api/products for /products): agents read JSON far better.
+    const form = found.method === "GET" ? await preferJsonTwin(base, found) : found;
+    if (known.some((c) => c.mappedRequests.some((m) => m.method === form.method && (samePath(m.path, form.path) || samePath(m.path, found.path))))) continue;
     const id = await saveFormCapability(ctx, form, episodeId);
     if (id) learned.push({ kind: "capability", id });
   }
@@ -248,6 +250,23 @@ export function formsOf(base: string, page: Pick<Page, "path" | "text" | "title"
     out.push({ method, path: url.pathname, fields, label, page: page.path, pageTitle: textOf(page.title) });
   }
   return out;
+}
+
+/** For a GET form, use /api<path> when it answers JSON. Only GETs are probed: reading changes nothing. */
+async function preferJsonTwin(base: string, form: FormFact): Promise<FormFact> {
+  if (form.path.startsWith("/api/")) return form;
+  const twin = `/api${form.path}`;
+  const query = new URLSearchParams(form.fields.map((f) => [f.name, ""])).toString();
+  try {
+    const res = await fetch(`${base}${twin}${query ? `?${query}` : ""}`, {
+      headers: { [EXPLORE_HEADER]: EXPLORE_SECRET, accept: "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (res.ok && /json/i.test(res.headers.get("content-type") ?? "")) return { ...form, path: twin };
+  } catch {
+    // no twin
+  }
+  return form;
 }
 
 function dedupeForms(forms: FormFact[]): FormFact[] {

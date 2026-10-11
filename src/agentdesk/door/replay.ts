@@ -101,16 +101,52 @@ export async function replay(
       redirect: "manual",
       signal: AbortSignal.timeout(15_000),
     });
+    const type = res.headers.get("content-type") ?? "";
     const text = await res.text();
-    let parsed: unknown = text;
-    try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch {
-      parsed = text.length > 2000 ? `${text.slice(0, 2000)}...` : text;
+    let parsed: unknown;
+    if (/html/i.test(type) && !/^\s*[[{]/.test(text)) {
+      // An HTML page is a wall of markup for an agent: give it the readable text and the form values instead.
+      parsed = readablePage(text);
+    } else {
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = text.length > 2000 ? `${text.slice(0, 2000)}...` : text;
+      }
     }
     const result: StepResult = { method, path, status: res.status, body: parsed };
     rc.steps.push(result);
     if (res.status >= 400) break; // later steps depend on earlier ones
   }
   return rc.steps;
+}
+
+/** What an agent needs from an HTML page: its title, its readable text, and the values its forms carry (SKUs, ids). */
+export function readablePage(html: string): { title: string; text: string; forms: string[] } {
+  const title = strip(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  const body = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? html;
+  const text = strip(body.replace(/<(script|style|svg|head)[\s\S]*?<\/\1>/gi, " "));
+  const forms: string[] = [];
+  for (const m of html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
+    const action = m[1].match(/\baction\s*=\s*"([^"]*)"/i)?.[1] ?? "";
+    const method = (m[1].match(/\bmethod\s*=\s*"([^"]*)"/i)?.[1] ?? "get").toUpperCase();
+    const values = [...m[2].matchAll(/<input\b[^>]*>/gi)]
+      .map((i) => [i[0].match(/\bname\s*=\s*"([^"]*)"/i)?.[1], i[0].match(/\bvalue\s*=\s*"([^"]*)"/i)?.[1]])
+      .filter(([n, v]) => n && v !== undefined && !/csrf|token/i.test(n))
+      .map(([n, v]) => `${n}=${v}`);
+    if (values.length) forms.push(`${method} ${action} ${values.join(" ")}`.trim());
+    if (forms.length >= 30) break;
+  }
+  return { title, text: text.length > 1500 ? `${text.slice(0, 1500)}...` : text, forms };
+}
+
+function strip(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
 }
