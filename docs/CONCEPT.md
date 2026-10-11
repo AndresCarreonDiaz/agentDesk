@@ -16,7 +16,7 @@ It should feel like a toggle. The site already runs on MongoDB, so the developer
 
 ```
 npm i agentdesk
-# .env: MONGODB_URI (already there), ANTHROPIC_API_KEY or OPENAI_API_KEY, VOYAGE_API_KEY
+# .env: MONGODB_URI (already there) + GEMINI_API_KEY (or Anthropic / OpenAI); VOYAGE_API_KEY optional
 app.use(agentdesk())
 ```
 

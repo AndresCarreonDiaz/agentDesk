@@ -33,9 +33,11 @@ npm i agentdesk
 ```
 # .env  (MONGODB_URI is usually there already: the site runs on MongoDB)
 MONGODB_URI=...          # the developer's own Atlas cluster (today: the hackathon sandbox)
-ANTHROPIC_API_KEY=...    # or OPENAI_API_KEY: the desk thinks with the developer's own LLM key
-VOYAGE_API_KEY=...       # embeddings for intent match (today; the goal is zero extra keys)
+GEMINI_API_KEY=...       # or ANTHROPIC_API_KEY / OPENAI_API_KEY: the desk thinks with the developer's own LLM key
+VOYAGE_API_KEY=...       # optional: embeddings for intent match; without it, Gemini makes them
 ```
+
+The minimum install is **two keys**: `MONGODB_URI` and `GEMINI_API_KEY`.
 
 ```ts
 app.use(agentdesk())
@@ -47,6 +49,12 @@ On first start, `agentdesk()`:
 2. Creates the collections below and the Atlas Vector Search indexes if they are missing.
 3. Creates an admin token in `settings` and prints the panel link (`/agentdesk?token=...`) to the server log once.
 4. Mounts the tap, discovery, `/agent`, `/mcp` and the panel, and starts the Loop in the same process.
+
+### Thinking and embeddings: one helper each, shared by every part
+
+- **LLM:** the first key found, in this order: `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`. Team default today: Gemini, model `gemini-2.5-flash` (override with `AGENTDESK_MODEL`). Every part calls the model only through `src/agentdesk/contract/llm.ts`.
+- **Embeddings:** Voyage (`voyage-3.5`, 1024 dimensions) when `VOYAGE_API_KEY` is set, otherwise Gemini (`gemini-embedding-001`, 768 dimensions, normalised). The choice is **locked at first start** in `settings.embedding`, because vectors from two different models cannot be compared, and the vector indexes are built with those dimensions. Every part embeds only through `src/agentdesk/contract/embed.ts`, never by calling a provider directly.
+- Door writes both helpers first; they live in `contract/` because Loop and the panel use them too.
 
 All options are optional: `agentdesk({ db, siteId, panelPath })`. There is no AgentDesk account and no AgentDesk server: the desk's memory lives in the developer's own cluster, and its thinking runs on the developer's own LLM key.
 
@@ -131,7 +139,7 @@ All documents carry `siteId` (which host platform) and `createdAt`.
   verifiedByEpisodeId: string | null;
   stats: { calls: number; successes: number };
   examples: { input: unknown; requestId: string }[];
-  embedding: number[];                  // Voyage, for intent match
+  embedding: number[];                  // from contract/embed.ts, for intent match
   updatedAt: Date;
 }
 ```
@@ -174,7 +182,8 @@ Door enforces only `active` rules, and on **both paths**: the `do` tool and the 
 ### `settings` (written by `agentdesk()` on first start)
 
 ```ts
-{ _id: "settings"; siteId: string; adminTokenHash: string; installedAt: Date }
+{ _id: "settings"; siteId: string; adminTokenHash: string; installedAt: Date;
+  embedding: { provider: "voyage" | "gemini"; model: string; dims: number } }   // locked at first start
 ```
 
 ## 4. Capability lifecycle
@@ -269,3 +278,4 @@ The Store part owns the panel code (inside the package) and the demo store, whic
 - v1: first version.
 - v2: one drop-in package (`src/agentdesk/`) holds tap, door, loop and panel; the tap moves from Store to Door. Install = `MONGODB_URI` + LLM key + `app.use(agentdesk())`, with the desk's own `agentdesk` database and a `settings` collection. Five fixed agent tools with capabilities as data (no dynamic MCP tools). `doneNote` on episodes, 60 second abandon timeout, `siteId` defined.
 - v3: committee review of v2 (see [REVIEW.md](REVIEW.md)). Learning from failures (section 4b): `priorFailureId`, `reflection.diff`, `failure` knowledge, reflector-proposed rules (`rules.source`, `rules.status`, `evidence`). Success oracle `siteSuccess`; `verified` needs it. Demotion after 2 failed episodes. `mappedRequests[]` sequence for multi-request actions. Active rules are enforced in the tap too, so fallback clicks cannot bypass them. `about` tells agents to call `list_actions` before `do`.
+- v4: Gemini accepted as the LLM (team default `gemini-2.5-flash`); `VOYAGE_API_KEY` optional with Gemini embeddings as fallback, provider locked in `settings.embedding`. Shared `contract/llm.ts` and `contract/embed.ts` are the only way to call a model or embed. Minimum install is two keys.

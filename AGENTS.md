@@ -12,7 +12,8 @@ Background, when you need it: [CONCEPT](docs/CONCEPT.md), [ARCHITECTURE](docs/AR
 
 ## Rules
 
-- Everything a developer installs lives in one package, `src/agentdesk/`. Installing must stay one line plus env keys (`MONGODB_URI`, an LLM key, `VOYAGE_API_KEY`): never add a setup step for the developer.
+- Everything a developer installs lives in one package, `src/agentdesk/`. Installing must stay one line plus env keys (minimum `MONGODB_URI` and `GEMINI_API_KEY`; `VOYAGE_API_KEY` optional): never add a setup step for the developer.
+- Call a model only through `src/agentdesk/contract/llm.ts` and embed only through `src/agentdesk/contract/embed.ts`. Never call Gemini, Voyage or any provider directly from a part.
 - Work only in your part's folder: Door `src/agentdesk/index.ts` + `src/agentdesk/door/`, Loop `src/agentdesk/loop/`, Store `src/store/` + `src/agentdesk/panel/`. Talk to other parts only through `src/agentdesk/contract/` or HTTP.
 - Agents always see the same five tools (`about`, `ask`, `list_actions`, `do`, `done`). Never add a tool per capability; capabilities are data.
 - Do not change `docs/CONTRACT.md` or `src/agentdesk/contract/` without the team agreeing. A contract change is its own commit with a changelog line.
