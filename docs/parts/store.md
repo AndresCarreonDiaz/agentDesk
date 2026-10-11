@@ -55,6 +55,6 @@ See [CONTRACT.md](../CONTRACT.md) sections 2, 3 and 5.
 - [x] 1. Demo store runs locally, cart keyed by session cookie.
 - [ ] 2. Install line: wired in `src/store/index.ts`, waiting for the Door's `agentdesk()`.
 - [ ] 3. Visitor agent.
-- [ ] 4. Panel on fixtures.
-- [ ] 5. Panel live.
+- [x] 4. Panel: feed, learned actions, proposed rules, autopilot and audit, learning curve (`src/agentdesk/panel/`, JSON API under `/api/*`, tested in `panel.test.ts`).
+- [x] 5. Panel live: reads Atlas every 2 s; approve/block, rule status and autopilot write back.
 - [ ] 6. Modelence deploy.
