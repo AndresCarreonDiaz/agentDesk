@@ -95,6 +95,20 @@ describe("explorer", () => {
     expect(cols.capabilities.docs).toHaveLength(3);
   });
 
+  it("still learns add_to_cart when a learned multi-step purchase already contains that step", async () => {
+    const fresh = fakeCtx("u");
+    (fresh.ctx as any).llm = (ctx as any).llm;
+    (fresh.ctx as any).embedder = (ctx as any).embedder;
+    const now = new Date();
+    await fresh.cols.capabilities.insertOne({
+      siteId: "u", createdAt: now, updatedAt: now, capabilityId: "cap_buy", name: "purchase_item_with_coupon", description: "Buy", kind: "write", stage: "proposed",
+      inputSchema: {}, mappedRequests: [{ method: "POST", path: "/cart/items", bodyTemplate: {} }, { method: "POST", path: "/api/checkout", bodyTemplate: {} }],
+      sourceEpisodeId: "ep_x", sourceRequestId: "req_x", verifiedByEpisodeId: null, stats: { calls: 0, successes: 0 }, examples: [], embedding: [],
+    });
+    await exploreSite(fresh.ctx, base, "ep_3");
+    expect(fresh.cols.capabilities.docs.map((c) => c.name)).toContain("add_to_cart");
+  });
+
   it("after a failed visit it explores at most every couple of minutes", async () => {
     const fresh = fakeCtx("t");
     (fresh.ctx as any).llm = (ctx as any).llm;

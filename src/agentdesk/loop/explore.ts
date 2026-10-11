@@ -72,7 +72,10 @@ export async function exploreSite(ctx: AgentDeskContext, base: string, episodeId
   for (const found of forms) {
     // A search form often has a JSON twin (/api/products for /products): agents read JSON far better.
     const form = found.method === "GET" ? await preferJsonTwin(base, found) : found;
-    if (known.some((c) => c.mappedRequests.some((m) => m.method === form.method && (samePath(m.path, form.path) || samePath(m.path, found.path))))) continue;
+    // Known only if a single-step action already does exactly this. A learned multi-step flow
+    // (cart, coupon, checkout) that contains the step does not count: agents still need the step alone.
+    const same = (m: { method: string; path: string }) => m.method === form.method && (samePath(m.path, form.path) || samePath(m.path, found.path));
+    if (known.some((c) => c.mappedRequests.length === 1 && same(c.mappedRequests[0]))) continue;
     const id = await saveFormCapability(ctx, form, episodeId);
     if (id) learned.push({ kind: "capability", id });
   }
