@@ -61,6 +61,16 @@ Agents only ever talk to the desk's MCP (or `POST /agent`). Proven live on the d
 
 The numbers that prove it: **task success rate, steps per task and seconds per task, plotted against visit count.** Run it yourself: `npm run demo:mcp` against a store with AgentDesk on a fresh database.
 
+## How Raindrop proves it improves
+
+Our panel says the desk learns. Raindrop shows it from outside our code.
+
+- **Every visit is an `agent_visit` event:** the agent family (gemini-visitor, claude-code), the goal, the outcome, steps, seconds, **`siteRequests`** (how many requests the agent had to send to the website itself) and **`usedLearnedAction`**. Over visits, `siteRequests` drops (4 → 1 → 0 in our Gemini runs) as the desk takes over.
+- **Every self-change is a signal:** `action_learned` (a working request became a tool), `action_verified` (the site confirmed it), `guardrail_proposed` (repeated refusals became a rule to review), and `lesson_style_changed` / `lesson_style_kept` / `lesson_style_reverted` (the desk changed how it teaches, and kept the change only if the next visit succeeded on the site).
+- **Raindrop finds the stumbles:** its issue detection flagged where agents got stuck (for example "ask() could not answer what is the SKU for the blue mug"), which is exactly the failure the desk turns into a lesson.
+
+So the improvement loop is measurable by a third party: stumbles go in, learned tools and lessons come out, and `siteRequests` per visit goes down.
+
 ## What is in this repo
 
 - [docs/CONCEPT.md](docs/CONCEPT.md): the product, the learning loop, developer control
@@ -89,7 +99,7 @@ Built at the Harness Engineering & Model Wrangling #SFTechWeek Hackathon (MongoD
 | **Voyage AI through Atlas** (AI Model APIs) | Embeddings (`voyage-3.5`, 1024 dimensions) via `ai.mongodb.com` with an Atlas model API key. Each database locks its embedding provider on first start. |
 | **Gemini** (`gemini-3.8-flash`) | The desk's thinking: routing a plain-language request to a tool, answering only from learned facts, naming learned actions, reading the site's own pages. |
 | **MCP** (Streamable HTTP) | The five fixed agent tools, stateless, so restarts and several instances lose nothing. |
-| **Raindrop** | One event per closed visit from the Loop, with success and abandon signals. |
+| **Raindrop** | One `agent_visit` event per visit (outcome, steps, seconds, siteRequests, usedLearnedAction) plus learning signals for every self-change. See [How Raindrop proves it improves](#how-raindrop-proves-it-improves). |
 | **Modelence** | Hosts Harbor Goods with AgentDesk inside: the public demo link. |
 
 **Atlas Agent Engine** is not used, on purpose. AgentDesk runs inside the developer's own app with one line and their own keys, while Agent Engine runs agents on its hosted runtime. AgentDesk keeps the same ideas in its own Atlas collections (long-term memory, an action allowlist by stage, rules enforced on every path, an audit log). Exporting learned actions as Agent Engine tools is a natural next step.
